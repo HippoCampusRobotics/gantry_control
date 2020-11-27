@@ -1,0 +1,7 @@
+old: false
+rate: 30.0
+serial_port: "/dev/motor_y"
+baud: 19200
+timeout: 1.0
+increments_per_meter: 645161
+meter_per_second_per_rpm: 0.000070922

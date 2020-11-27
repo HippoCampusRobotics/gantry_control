@@ -1,0 +1,159 @@
+#!/usr/bin/env python
+import rospy
+import time
+from gantry_control import faulhaber_rs232, mcbl2805
+from hippocampus_common.node import Node
+from std_msgs.msg import Float64
+from hippocampus_msgs.msg import GantryMotorPosition
+from hippocampus_msgs.srv import GetFloat, GetFloatResponse, SetFloat, SetFloatResponse
+from std_srvs.srv import Trigger, TriggerResponse
+import threading
+
+
+class MotorNode(Node):
+    def __init__(self, name):
+        super(MotorNode, self).__init__(name=name)
+
+        self.data_lock = threading.RLock()
+        self.motor_lock = threading.RLock()
+
+        self.position_setpoint = dict(position=0.0, relative=True)
+        self.position_setpoint_flag = False
+        self.velocity_setpoint = dict(velocity=0.0)
+        self.velocity_setpoint_flag = False
+
+        self.emergency_stop = False
+
+        self.increments_per_meter = self.get_param("~increments_per_meter")
+        self.meter_per_second_per_rpm = self.get_param(
+            "~meter_per_second_per_rpm")
+
+        self.motor = self.init_motor()
+
+        self.position_pub = rospy.Publisher("~position",
+                                            GantryMotorPosition,
+                                            queue_size=1)
+        self.start_homing_service = rospy.Service("~start_homing", Trigger,
+                                                  self.serve_homing)
+
+        self.set_home_position = rospy.Service("~set_home_position", Trigger,
+                                               self.serve_set_home)
+        self.get_max_velocity = rospy.Service("~get_max_velocity", GetFloat,
+                                              self.serve_get_max_velocity)
+        self.set_max_velocity = rospy.Service("~set_max_velocity", SetFloat,
+                                              self.serve_set_max_velocity)
+        self.estop_service = rospy.Service("~emergency_stop", Trigger,
+                                           self.serve_emergency_stop)
+
+        self.position_setpoint_sub = rospy.Subscriber(
+            "~setpoint_position/absolute", Float64, self.on_setpoint_position)
+        self.position_setpoint_relative_sub = rospy.Subscriber(
+            "~setpoint_position/relative", Float64,
+            self.on_setpoint_position_relative)
+
+    def serve_set_home(self, req):
+        with self.motor_lock:
+            self.motor.set_home()
+        return TriggerResponse(True, "Started homing sequence...")
+
+    def init_motor(self):
+        port = self.get_param("~serial_port")
+        baud = self.get_param("~baud", 19200)
+        timeout = self.get_param("~timeout", 1.0)
+        old = self.get_param("~old", True)
+        if old:
+            motor = mcbl2805.Motor(port, baud, timeout)
+        else:
+            motor = faulhaber_rs232.Motor(port, baud, timeout)
+
+        with self.motor_lock:
+            increments = motor.read_position()
+        self.position_setpoint = dict(position=(float(increments) /
+                                                self.increments_per_meter),
+                                      relative=False)
+        return motor
+
+    def on_setpoint_position(self, msg):
+        with self.data_lock:
+            self.position_setpoint = dict(position=msg.data, relative=False)
+            self.position_setpoint_flag = True
+
+    def on_setpoint_position_relative(self, msg):
+        with self.data_lock:
+            self.position_setpoint = dict(position=msg.data, relative=True)
+            self.position_setpoint_flag = True
+
+    def run(self):
+        hz = self.get_param("~rate", 30.0)
+        rate = rospy.Rate(hz)
+
+        while not rospy.is_shutdown():
+            with self.motor_lock:
+                increments = self.motor.read_position()
+            self.publish_position(increments)
+
+            if not self.emergency_stop:
+                if self.position_setpoint_flag:
+                    self.position_setpoint_flag = False
+                    self.move_to_position()
+                if self.velocity_setpoint_flag:
+                    self.velocity_setpoint_flag = False
+                    self.move_with_velocity()
+            
+            else:
+                with self.motor_lock:
+                    self.motor.set_velocity(0)
+
+            rate.sleep()
+
+    def move_with_velocity(self):
+        with self.motor_lock:
+            rpm = float(self.velocity_setpoint["velocity"]
+                        ) / self.meter_per_second_per_rpm
+            self.motor.set_velocity()
+
+    def move_to_position(self):
+        with self.motor_lock:
+            self.motor.set_position(int(self.position_setpoint["position"] *
+                                        self.increments_per_meter),
+                                    relative=self.position_setpoint["relative"])
+            self.motor.move_to_position()
+
+    def serve_homing(self, req):
+        with self.motor_lock:
+            self.motor.start_homing()
+        return TriggerResponse(True, "Started homing sequence...")
+
+    def serve_get_max_velocity(self, req):
+        with self.motor_lock:
+            max_velocity = (float(self.motor.read_position_max_velocity()) *
+                            self.meter_per_second_per_rpm)
+
+        return GetFloatResponse(value=max_velocity, success=True)
+
+    def serve_set_max_velocity(self, req):
+        with self.motor_lock:
+            self.motor.set_position_max_velocity(
+                int(req.value / self.meter_per_second_per_rpm))
+        return SetFloatResponse(success=True)
+
+    def serve_emergency_stop(self, req):
+        with self.motor_lock:
+            self.motor.set_velocity(0)
+            self.emergency_stop = True
+        return TriggerResponse(success=true, message="Stopping Motors!")
+
+    def publish_position(self, increments):
+        msg = GantryMotorPosition()
+        msg.position = float(increments) / self.increments_per_meter
+        msg.increments = increments
+        self.position_pub.publish(msg)
+
+
+def main():
+    node = MotorNode("motor")
+    node.run()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,6 @@
+<launch>
+    <arg name="axis" />
+    <node name="motor_$(arg axis)" pkg="gantry_control" type="gantry_motor" output="screen">
+        <rosparam command="load" file="$(find gantry_control)/config/motor_$(arg axis).yaml"/>
+    </node>
+</launch>
