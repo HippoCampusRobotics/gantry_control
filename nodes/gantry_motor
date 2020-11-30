@@ -99,7 +99,7 @@ class MotorNode(Node):
                 if self.velocity_setpoint_flag:
                     self.velocity_setpoint_flag = False
                     self.move_with_velocity()
-            
+
             else:
                 with self.motor_lock:
                     self.motor.set_velocity(0)
@@ -108,9 +108,9 @@ class MotorNode(Node):
 
     def move_with_velocity(self):
         with self.motor_lock:
-            rpm = float(self.velocity_setpoint["velocity"]
-                        ) / self.meter_per_second_per_rpm
-            self.motor.set_velocity()
+            rpm = int(self.velocity_setpoint["velocity"] /
+                      self.meter_per_second_per_rpm)
+            self.motor.set_velocity(rpm)
 
     def move_to_position(self):
         with self.motor_lock:
@@ -141,7 +141,7 @@ class MotorNode(Node):
         with self.motor_lock:
             self.motor.set_velocity(0)
             self.emergency_stop = True
-        return TriggerResponse(success=true, message="Stopping Motors!")
+        return TriggerResponse(success=True, message="Stopping Motors!")
 
     def publish_position(self, increments):
         msg = GantryMotorPosition()
