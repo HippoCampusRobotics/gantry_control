@@ -1,4 +1,4 @@
-old: false
+legacy: false
 rate: 30.0
 serial_port: "/dev/motor_y"
 baud: 19200

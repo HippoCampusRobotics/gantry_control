@@ -1,21 +1,11 @@
 import serial
 import time
+from gantry_control.motor import BaseMotor
 
 GET_TYPE = "GTYP"
 GET_SERIAL = "GSER"
 GET_VERSION = "VER"
-GET_POSITION = "POS"
-GET_TARGET_POSITION = "TPOS"
-GET_VELOCITY = "GV"
-GET_TARGET_VELOCITY = "GN"
-GET_TEMPERATURE = "TEM"
 GET_OPERATING_STATUS = "OST"
-
-GET_STATUS = "GST"
-GET_ACTUAL_STATE = "GAST"
-GET_EXTENDED_STATE = "GES"
-GET_FAILURE_STATE = "GFS"
-GET_HARD_STATE = "HS"
 
 GET_CONFIG_STATUS = "CST"
 GET_MODE = "GMOD"
@@ -42,8 +32,6 @@ GET_CONTINUOUS_CURRENT = "GCC"
 GET_DEVIATION = "GDEV"
 GET_CORRIDOR = "GCORRIDOR"
 
-START_HOMING = "GOHOSEQ"
-
 CST_AUTOMATIC_REPONSE_BITMASK = 0b11
 CST_AUTOMATIC_RESPONSE_BITSHIFT = 1
 CST_VELOCITY_PRESETTING_BITMASK = 0b111
@@ -64,55 +52,33 @@ CST_SIN_COMMUTATION_BITSHIFT = 14
 AVAILABLE_BAUD = (1200, 2400, 4800, 9600, 19200, 57600, 115200)
 
 
-class Motor(object):
+class Motor(BaseMotor):
     def __init__(self, port, baud, timeout):
-        self.port = serial.Serial(port=port, baudrate=baud, timeout=timeout)
+        super(Motor, self).__init__(port=port, baud=baud, timeout=timeout)
 
-    def _send_command(self, command, arg=""):
-        self.port.write(b"{}{}\r".format(command, arg))
-
-    def _read_answer(self):
-        return self.port.readline().rstrip()
-
-    def read_motor_info(self):
-        motor_type = self.read_type()
-        motor_serial = self.read_serial()
-        motor_version = self.read_version()
+    def get_motor_info(self):
+        motor_type = self.get_type()
+        motor_serial = self.get_serial()
+        motor_version = self.get_version()
         return dict(type=motor_type, serial=motor_serial, version=motor_version)
 
-    def read_type(self):
+    def get_type(self):
         self._send_command(GET_TYPE)
         return self._read_answer()
 
-    def read_temperature(self):
+    def get_temperature(self):
         self._send_command(GET_TEMPERATURE)
         return self._read_answer()
 
-    def read_serial(self):
+    def get_serial(self):
         self._send_command(GET_SERIAL)
         return self._read_answer()
 
-    def read_version(self):
+    def get_version(self):
         self._send_command(GET_VERSION)
         return self._read_answer()
 
-    def read_position(self):
-        self._send_command(GET_POSITION)
-        return int(self._read_answer())
-
-    def read_target_position(self):
-        self._send_command(GET_TARGET_POSITION)
-        return int(self._read_answer)
-
-    def read_velocity(self):
-        self._send_command(GET_VELOCITY)
-        return float(self._read_answer)
-
-    def read_target_velocity(self):
-        self._send_command(GET_TARGET_VELOCITY)
-        return float(self._read_answer)
-
-    def read_operating_status(self):
+    def get_operating_status(self):
         self._send_command(GET_OPERATING_STATUS)
         ans = int(self._read_answer())
         ret = {}
@@ -136,13 +102,7 @@ class Motor(object):
         ans = int(self._read_answer())
         return bool((1 << 0) & ans)
 
-    def start_homing(self, wait_until_finished=True):
-        self._send_command(START_HOMING)
-        if wait_until_finished:
-            while (self.is_homing()):
-                time.sleep(1.0)
-
-    def read_mode(self):
+    def get_mode(self):
         self._send_command(GET_MODE)
         ans = self._read_answer()
         if ans == b"c":
@@ -162,7 +122,7 @@ class Motor(object):
         else:
             return "Unknown: '{}'".format(ans)
 
-    def read_config_status(self):
+    def get_config_status(self):
         self._send_command(GET_CONFIG_STATUS)
         ans = int(self._read_answer())
         ret = {}
