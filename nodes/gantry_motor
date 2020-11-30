@@ -50,6 +50,11 @@ class MotorNode(Node):
         self.is_homing_service = rospy.Service("~is_homing", Trigger,
                                                self.serve_is_homing)
 
+        self.enable_service = rospy.Service("~enable", Trigger,
+                                            self.serve_enable)
+        self.disable_service = rospy.Service("~disable", Trigger,
+                                             self.serve_disable)
+
         self.release_estop_service = rospy.Service(
             "~release_emergency_stop", Trigger,
             self.serve_release_emergency_stop())
@@ -163,6 +168,16 @@ class MotorNode(Node):
         with self.motor_lock:
             self.emergency_stop = False
         return TriggerResponse(success=True, message="Released emergency stop.")
+
+    def serve_enable(self, req):
+        with self.motor_lock:
+            self.motor.enable()
+        return TriggerResponse(success=True, message="Enabled Motor.")
+
+    def serve_disable(self, req):
+        with self.motor_lock:
+            self.motor.disable()
+        return TriggerResponse(success=True, message="Disabled Motor.")
 
     def publish_position(self, increments):
         msg = GantryMotorPosition()
