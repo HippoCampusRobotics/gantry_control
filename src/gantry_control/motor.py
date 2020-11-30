@@ -3,6 +3,8 @@ import abc
 
 
 class BaseMotor(object):
+    ENABLE = "EN"
+    DISABLE = "DI"
     GET_POSITION = "POS"
     GET_TARGET_VELOCITY = "GN"
     SET_POSITION_ABSOLUTE = "LA"
@@ -40,6 +42,12 @@ class BaseMotor(object):
             value = 0
             success = False
         return success, value
+
+    def enable(self):
+        self._send_command(self.ENABLE)
+
+    def disable(self):
+        self._send_command(self.DISABLE)
 
     def get_position(self):
         """Reads the current position of the motor.
