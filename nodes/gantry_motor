@@ -81,7 +81,7 @@ class MotorNode(Node):
             motor = faulhaber_rs232.Motor(port, baud, timeout)
 
         with self.motor_lock:
-            increments = motor.get_position()
+            success, increments = motor.get_position()
         self.position_setpoint = dict(position=(float(increments) /
                                                 self.increments_per_meter),
                                       relative=False)
@@ -103,8 +103,8 @@ class MotorNode(Node):
 
         while not rospy.is_shutdown():
             with self.motor_lock:
-                increments = self.motor.get_position()
-                rpm = self.motor.get_velocity()
+                success, increments = self.motor.get_position()
+                success, rpm = self.motor.get_velocity()
             self.publish_position(increments)
             self.publish_velocity(rpm)
 
@@ -147,8 +147,8 @@ class MotorNode(Node):
 
     def serve_get_max_velocity(self, req):
         with self.motor_lock:
-            max_velocity = (float(self.motor.get_max_velocity()) *
-                            self.meter_per_second_per_rpm)
+            success, max_velocity = (float(self.motor.get_max_velocity()) *
+                                     self.meter_per_second_per_rpm)
 
         return GetFloatResponse(value=max_velocity, success=True)
 
