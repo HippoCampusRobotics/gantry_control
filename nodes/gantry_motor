@@ -4,7 +4,7 @@ import time
 from gantry_control import faulhaber_rs232, mcbl2805
 from hippocampus_common.node import Node
 from std_msgs.msg import Float64
-from hippocampus_msgs.msg import GantryMotorPosition
+from hippocampus_msgs.msg import GantryMotorPosition, GantryMotorVelocity
 from hippocampus_msgs.srv import GetFloat, GetFloatResponse, SetFloat, SetFloatResponse
 from std_srvs.srv import Trigger, TriggerResponse
 import threading
@@ -33,6 +33,9 @@ class MotorNode(Node):
         self.position_pub = rospy.Publisher("~position",
                                             GantryMotorPosition,
                                             queue_size=1)
+        self.velocity_pub = rospy.Publisher("~velocity",
+                                            GantryMotorVelocity,
+                                            queue_size=1)
         self.start_homing_service = rospy.Service("~start_homing", Trigger,
                                                   self.serve_homing)
 
@@ -44,6 +47,12 @@ class MotorNode(Node):
                                               self.serve_set_max_velocity)
         self.estop_service = rospy.Service("~emergency_stop", Trigger,
                                            self.serve_emergency_stop)
+        self.is_homing_service = rospy.Service("~is_homing", Trigger,
+                                               self.serve_is_homing)
+
+        self.release_estop_service = rospy.Service(
+            "~release_emergency_stop", Trigger,
+            self.serve_release_emergency_stop())
 
         self.position_setpoint_sub = rospy.Subscriber(
             "~setpoint_position/absolute", Float64, self.on_setpoint_position)
@@ -60,14 +69,14 @@ class MotorNode(Node):
         port = self.get_param("~serial_port")
         baud = self.get_param("~baud", 19200)
         timeout = self.get_param("~timeout", 1.0)
-        old = self.get_param("~old", True)
-        if old:
+        legacy = self.get_param("~legacy", True)
+        if legacy:
             motor = mcbl2805.Motor(port, baud, timeout)
         else:
             motor = faulhaber_rs232.Motor(port, baud, timeout)
 
         with self.motor_lock:
-            increments = motor.read_position()
+            increments = motor.get_position()
         self.position_setpoint = dict(position=(float(increments) /
                                                 self.increments_per_meter),
                                       relative=False)
@@ -89,8 +98,10 @@ class MotorNode(Node):
 
         while not rospy.is_shutdown():
             with self.motor_lock:
-                increments = self.motor.read_position()
+                increments = self.motor.get_position()
+                rpm = self.motor.get_velocity()
             self.publish_position(increments)
+            self.publish_velocity(rpm)
 
             if not self.emergency_stop:
                 if self.position_setpoint_flag:
@@ -117,23 +128,28 @@ class MotorNode(Node):
             self.motor.set_position(int(self.position_setpoint["position"] *
                                         self.increments_per_meter),
                                     relative=self.position_setpoint["relative"])
-            self.motor.move_to_position()
+            self.motor.move_to_target_position()
 
     def serve_homing(self, req):
         with self.motor_lock:
             self.motor.start_homing()
         return TriggerResponse(True, "Started homing sequence...")
 
+    def serve_is_homing(self, req):
+        with self.motor_lock:
+            is_homing = self.motor.is_homing()
+        return TriggerResponse(is_homing, "Homing status")
+
     def serve_get_max_velocity(self, req):
         with self.motor_lock:
-            max_velocity = (float(self.motor.read_position_max_velocity()) *
+            max_velocity = (float(self.motor.get_max_velocity()) *
                             self.meter_per_second_per_rpm)
 
         return GetFloatResponse(value=max_velocity, success=True)
 
     def serve_set_max_velocity(self, req):
         with self.motor_lock:
-            self.motor.set_position_max_velocity(
+            self.motor.set_max_velocity(
                 int(req.value / self.meter_per_second_per_rpm))
         return SetFloatResponse(success=True)
 
@@ -143,11 +159,22 @@ class MotorNode(Node):
             self.emergency_stop = True
         return TriggerResponse(success=True, message="Stopping Motors!")
 
+    def serve_release_emergency_stop(self, req):
+        with self.motor_lock:
+            self.emergency_stop = False
+        return TriggerResponse(success=True, message="Released emergency stop.")
+
     def publish_position(self, increments):
         msg = GantryMotorPosition()
         msg.position = float(increments) / self.increments_per_meter
         msg.increments = increments
         self.position_pub.publish(msg)
+
+    def publish_velocity(self, rpm):
+        msg = GantryMotorVelocity()
+        msg.velocity = float(rpm) * self.meter_per_second_per_rpm
+        msg.rpm = rpm
+        self.velocity_pub.publish(msg)
 
 
 def main():

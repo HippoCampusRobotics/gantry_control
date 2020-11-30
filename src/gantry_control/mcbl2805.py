@@ -1,4 +1,5 @@
 import serial
+from gantry_control.motor import BaseMotor
 
 POSITION_ERROR = -999
 
@@ -74,87 +75,11 @@ ES_DEVIATION_ERROR_BITMASK = 0x01
 ES_DEVIATION_ERROR_SHIFT = 0x04
 
 
-class Motor():
+class Motor(BaseMotor):
     def __init__(self, port, baud, timeout):
-        self.port = serial.Serial(port=port, baudrate=baud, timeout=timeout)
+        super(Motor, self).__init__(port=port, baud=baud, timeout=timeout)
 
-    def _send_command(self, command, arg=""):
-        self.port.write(b"{}{}\r".format(command, arg))
-
-    def _read_answer(self):
-        return self.port.readline().rstrip()
-
-    def set_home(self):
-        self._send_command(SET_HOME)
-        return
-
-    def read_position(self):
-        self._send_command(GET_POSITION)
-        ans = self._read_answer()
-        try:
-            position = int(ans)
-        except ValueError:
-            position = POSITION_ERROR
-        return position
-
-    def set_velocity(self, value):
-        self._send_command(SET_VELOCITY, int(value))
-
-    def read_target_velocity(self):
-        self._send_command(GET_TARGET_VELOCITY)
-        ans = self._read_answer()
-        try:
-            target = int(ans)
-        except ValueError:
-            target = 0
-        return target
-
-    def start_homing(self):
-        self._send_command(START_HOMING)
-
-    def read_velocity(self):
-        self._send_command(GET_VELOCITY)
-        ans = self._read_answer()
-        try:
-            velocity = int(ans)
-        except ValueError:
-            velocity = 0
-        return velocity
-
-    def set_position(self, value, relative=False):
-        if relative:
-            self._send_command(SET_POSITION_RELATIVE, value)
-        else:
-            self._send_command(SET_POSITION, value)
-
-    def move_to_position(self):
-        self._send_command(MOVE)
-
-    def set_position_max_velocity(self, value):
-        self._send_command(SET_POSTION_MAX_VELOCITY, value)
-
-    def read_position_max_velocity(self):
-        self._send_command(GET_POSITION_MAX_VELOCITY)
-        ans = self._read_answer()
-        try:
-            max_velocity = int(ans)
-        except ValueError:
-            max_velocity = -1
-        return max_velocity
-    
-    def set_position_acceleration(self, value):
-        self._send_command(SET_POSITION_ACCELERATION, value)
-    
-    def read_position_acceleration(self):
-        self._send_command(GET_POSITION_ACCELERATION)
-        ans = self._read_answer()
-        try:
-            acceleration = int(ans)
-        except ValueError:
-            acceleration = 0
-        return acceleration
-
-    def read_special_configuration(self):
+    def get_special_configuration(self):
         self._send_command(GET_SPECIAL_CONFIGURATION)
         ans = int(self._read_answer())
         ret = {}
