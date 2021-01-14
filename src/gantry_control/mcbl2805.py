@@ -23,12 +23,12 @@ class Motor(BaseMotor):
 
     def get_lower_limit_switch(self):
         self._send_command(self.GET_STATUS)
-        ans = self._read_answer(self)
+        ans = self._read_answer()
         lls_status = bool(int(ans[6]))
         return lls_status
 
     def get_upper_limit_switch(self):
         self._send_command(self.GET_ACTUAL_STATUS)
-        ans = self._read_answer(self)
+        ans = self._read_answer()
         uls_status = bool(int(ans[0]))
         return uls_status
