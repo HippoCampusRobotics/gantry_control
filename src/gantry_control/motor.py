@@ -68,9 +68,9 @@ class BaseMotor(object):
                 is relative. Defaults to False.
         """
         if relative:
-            self._send_command(self.SET_POSITION_RELATIVE)
+            self._send_command(self.SET_POSITION_RELATIVE, position)
         else:
-            self._send_command(self.SET_POSITION_ABSOLUTE)
+            self._send_command(self.SET_POSITION_ABSOLUTE, position)
 
     def start_homing(self):
         self._send_command(self.START_HOMING)
@@ -161,9 +161,16 @@ class BaseMotor(object):
 
     @abc.abstractmethod
     def is_homing(self):
-        """Checks if the motor is currently homing.
+        pass
 
-        Returns:
-            bool: Returns True if homing. Otherwise False will be returned.
-        """
+    @abc.abstractmethod
+    def get_lower_limit_switch(self):
+        pass
+
+    @abc.abstractmethod
+    def get_upper_limit_switch(self):
+        pass
+
+    @abc.abstractmethod
+    def is_enabled(self):
         pass
