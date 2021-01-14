@@ -4,7 +4,7 @@ import time
 from gantry_control import faulhaber_rs232, mcbl2805
 from hippocampus_common.node import Node
 from std_msgs.msg import Float64
-from hippocampus_msgs.msg import GantryMotorPosition, GantryMotorVelocity
+from hippocampus_msgs.msg import GantryMotorPosition, GantryMotorVelocity, GantryMotorLimitSwitches
 from hippocampus_msgs.srv import GetFloat, GetFloatResponse, SetFloat, SetFloatResponse
 from std_srvs.srv import Trigger, TriggerResponse
 import threading
@@ -36,6 +36,11 @@ class MotorNode(Node):
         self.velocity_pub = rospy.Publisher("~velocity",
                                             GantryMotorVelocity,
                                             queue_size=1)
+
+        self.limit_switch_pub = rospy.Publisher("~limit_switches",
+                                                GantryMotorLimitSwitches,
+                                                queue_size=1)
+
         self.start_homing_service = rospy.Service("~start_homing", Trigger,
                                                   self.serve_homing)
 
@@ -101,11 +106,23 @@ class MotorNode(Node):
     def run(self):
         hz = self.get_param("~rate", 30.0)
         rate = rospy.Rate(hz)
+        counter = 0
+        limit_switch_update = False
 
         while not rospy.is_shutdown():
+            counter += 1
             with self.motor_lock:
                 success, increments = self.motor.get_position()
                 success, rpm = self.motor.get_velocity()
+                if counter > hz:
+                    counter = 0
+                    limit_switch_update = True
+                    lower_limit_switch = self.motor.get_lower_limit_switch()
+                    upper_limit_switch = self.motor.get_upper_limit_switch()
+            if limit_switch_update:
+                limit_switch_update = False
+                self.publish_limit_switches(lower_limit_switch,
+                                            upper_limit_switch)
             self.publish_position(increments)
             self.publish_velocity(rpm)
 
@@ -196,6 +213,12 @@ class MotorNode(Node):
         msg.velocity = float(rpm) * self.meter_per_second_per_rpm
         msg.rpm = rpm
         self.velocity_pub.publish(msg)
+
+    def publish_limit_switches(self, lower_limit_switch, upper_limit_switch):
+        msg = GantryMotorLimitSwitches()
+        msg.lower_limit = lower_limit_switch
+        msg.upper_limit = upper_limit_switch
+        self.limit_switch_pub.publish(msg)
 
 
 def main():
