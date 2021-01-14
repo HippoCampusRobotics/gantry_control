@@ -57,7 +57,7 @@ class MotorNode(Node):
 
         self.release_estop_service = rospy.Service(
             "~release_emergency_stop", Trigger,
-            self.serve_release_emergency_stop())
+            self.serve_release_emergency_stop)
 
         self.position_setpoint_sub = rospy.Subscriber(
             "~setpoint_position/absolute", Float64, self.on_setpoint_position)
@@ -93,6 +93,7 @@ class MotorNode(Node):
             self.position_setpoint_flag = True
 
     def on_setpoint_position_relative(self, msg):
+        rospy.loginfo("Received relative position setpoint.")
         with self.data_lock:
             self.position_setpoint = dict(position=msg.data, relative=True)
             self.position_setpoint_flag = True
@@ -117,6 +118,7 @@ class MotorNode(Node):
                     self.move_with_velocity()
 
             else:
+                rospy.logwarn_throttle(5.0, "Emergency stop active!")
                 with self.motor_lock:
                     self.motor.set_velocity(0)
 
@@ -129,10 +131,14 @@ class MotorNode(Node):
             self.motor.set_velocity(rpm)
 
     def move_to_position(self):
+        increments = int(self.position_setpoint["position"] *
+                         self.increments_per_meter)
+        rospy.loginfo("Moving to %d", increments)
         with self.motor_lock:
-            self.motor.set_position(int(self.position_setpoint["position"] *
-                                        self.increments_per_meter),
-                                    relative=self.position_setpoint["relative"])
+            rospy.loginfo("Setting target.")
+            self.motor.set_position_target(
+                increments, relative=self.position_setpoint["relative"])
+            rospy.loginfo("Setting")
             self.motor.move_to_target_position()
 
     def serve_homing(self, req):

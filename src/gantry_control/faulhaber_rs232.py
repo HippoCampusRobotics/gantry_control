@@ -142,3 +142,19 @@ class Motor(BaseMotor):
         ret["sin_commutation"] = ((ans >> CST_SIN_COMMUTATION_BITSHIFT)
                                   & CST_SIN_COMMUTATION_BITMASK)
         return ret
+
+    def get_lower_limit_switch(self):
+        ost = self.get_operating_status()
+        status = ost["status_input_1"]
+        return status
+
+    def get_upper_limit_switch(self):
+        ost = self.get_operating_status()
+        status = ost["status_input_2"]
+        return status
+
+    def is_enabled(self):
+        self._send_command(self.CONTROL_STATUS)
+        ans = int(self._read_answer())
+        status = bool((1 << 10) & ans)
+        return status
