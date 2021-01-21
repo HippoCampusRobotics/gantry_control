@@ -69,6 +69,9 @@ class MotorNode(Node):
         self.position_setpoint_relative_sub = rospy.Subscriber(
             "~setpoint_position/relative", Float64,
             self.on_setpoint_position_relative)
+        self.velocity_setpoint_sub = rospy.Subscriber("~setpoint_velocity",
+                                                      Float64,
+                                                      self.on_setpoint_velocity)
 
     def serve_set_home(self, req):
         with self.motor_lock:
@@ -102,6 +105,11 @@ class MotorNode(Node):
         with self.data_lock:
             self.position_setpoint = dict(position=msg.data, relative=True)
             self.position_setpoint_flag = True
+
+    def on_setpoint_velocity(self, msg):
+        with self.data_lock:
+            self.velocity_setpoint = dict(velocity=msg.data)
+            self.velocity_setpoint_flag = True
 
     def run(self):
         hz = self.get_param("~rate", 30.0)
@@ -150,7 +158,9 @@ class MotorNode(Node):
     def move_to_position(self):
         increments = int(self.position_setpoint["position"] *
                          self.increments_per_meter)
-        rospy.loginfo("Moving to %d", increments)
+        rospy.loginfo("Moving to %dinc / %.2fm", increments,
+                      self.position_setpoint["position"])
+        rospy.loginfo("Relative=%s", self.position_setpoint["relative"])
         with self.motor_lock:
             rospy.loginfo("Setting target.")
             self.motor.set_position_target(
