@@ -1,9 +1,6 @@
 <launch>
-    <arg name="path_file" default="$(find gantry_control)/config/infinity_path.yaml" />
     <arg name="remote" doc="true or false" />
     <machine name="gantry" address="gantry.local" user="pi" env-loader="~/catkin_ws/env.sh" default="$(arg remote)" />
+
     <include file="$(find gantry_control)/launch/all_motors.launch" />
-    <node name="path_follower" pkg="gantry_control" type="path_follower" output="screen">
-        <rosparam command="load" file="$(arg path_file)" />
-    </node>
 </launch>
