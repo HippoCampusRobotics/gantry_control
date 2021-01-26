@@ -30,13 +30,13 @@ class PathFollower(Node):
         self.dyn_server = Server(PathFollowerConfig,
                                  self.serve_dynamic_reconfigure)
 
-        self.motor_x_pub = rospy.Publisher("gantry_motor_x/setpoint_velocity",
+        self.motor_x_pub = rospy.Publisher("motor_x/setpoint_velocity",
                                            Float64,
                                            queue_size=1)
-        self.motor_y_pub = rospy.Publisher("gantry_motor_y/setpoint_velocity",
+        self.motor_y_pub = rospy.Publisher("motor_y/setpoint_velocity",
                                            Float64,
                                            queue_size=1)
-        self.motor_z_pub = rospy.Publisher("gantry_motor_z/setpoint_velocity",
+        self.motor_z_pub = rospy.Publisher("motor_z/setpoint_velocity",
                                            Float64,
                                            queue_size=1)
 
@@ -52,22 +52,24 @@ class PathFollower(Node):
             self.serve_move_to_start_position)
         self.start_service = rospy.Service("~start", Trigger, self.serve_start)
         self.stop_service = rospy.Service("~stop", Trigger, self.serve_stop)
+        self.update_path_service = rospy.Service("~update_path", Trigger,
+                                                 self.serve_update_path)
 
         self.motor_pos_x_pub = rospy.Publisher(
-            "gantry_motor_x/setpoint_position/absolute", Float64, queue_size=1)
+            "motor_x/setpoint_position/absolute", Float64, queue_size=1)
         self.motor_pos_y_pub = rospy.Publisher(
-            "gantry_motor_y/setpoint_position/absolute", Float64, queue_size=1)
+            "motor_y/setpoint_position/absolute", Float64, queue_size=1)
         self.motor_pos_z_pub = rospy.Publisher(
-            "gantry_motor_z/setpoint_position/absolute", Float64, queue_size=1)
+            "motor_z/setpoint_position/absolute", Float64, queue_size=1)
 
         self.pos_x_sub = rospy.Subscriber(
-            "gantry_motor_x/position", GantryMotorPosition,
+            "motor_x/position", GantryMotorPosition,
             (lambda msg: self.on_position(msg, 0)))
         self.pos_y_sub = rospy.Subscriber(
-            "gantry_motor_y/position", GantryMotorPosition,
+            "motor_y/position", GantryMotorPosition,
             (lambda msg: self.on_position(msg, 1)))
         self.pos_z_sub = rospy.Subscriber(
-            "gantry_motor_z/position", GantryMotorPosition,
+            "motor_z/position", GantryMotorPosition,
             (lambda msg: self.on_position(msg, 2)))
 
     def on_position(self, msg, axis):
@@ -87,6 +89,15 @@ class PathFollower(Node):
         for (i, point) in enumerate(path_list):
             path[i] = np.array([point["x"], point["y"], point["z"]])
         return path
+
+    def update_path(self):
+        self.path = self.get_path()
+        tmp = self.get_param("~start_position",
+                             default=dict(x=1.0, y=2.0, z=-0.5))
+        self.start_position = [tmp["x"], tmp["y"], tmp["z"]]
+        self.loop = self.get_param("~loop", default=True)
+        self.target_index = 0
+
 
     def run(self):
         hz = self.get_param("~rate", default=20.0)
@@ -119,6 +130,17 @@ class PathFollower(Node):
                 self.start_position[2])
             self.publish_position(self.start_position)
         return TriggerResponse(True, text)
+
+    def serve_update_path(self, req):
+        with self.data_lock:
+            if self.running:
+                ret = TriggerResponse(False, "Cannot update path while running.")
+            else:
+                self.update_path()
+                ret = TriggerResponse(True, "Updated the path.")
+
+        return ret
+
 
     def update_control(self):
         if self.position_updated:

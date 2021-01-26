@@ -121,7 +121,17 @@ class MotorNode(Node):
             counter += 1
             with self.motor_lock:
                 success, increments = self.motor.get_position()
+                if not success:
+                    rospy.logerr(
+                        "[%s] Could not get motor position. "
+                        "Are all wires connected properly? "
+                        "Is the motor powered?", rospy.get_name())
                 success, rpm = self.motor.get_velocity()
+                if not success:
+                    rospy.logerr(
+                        "[%s] Could not get motor speed. "
+                        "Are all wires connected properly?"
+                        "Is the motor powered?", rospy.get_name())
                 if counter > hz:
                     counter = 0
                     limit_switch_update = True
