@@ -120,14 +120,14 @@ class MotorNode(Node):
         while not rospy.is_shutdown():
             counter += 1
             with self.motor_lock:
-                success, increments = self.motor.get_position()
-                if not success:
+                pos_result = self.motor.get_position()
+                if not pos_result[0]:
                     rospy.logerr(
                         "[%s] Could not get motor position. "
                         "Are all wires connected properly? "
                         "Is the motor powered?", rospy.get_name())
-                success, rpm = self.motor.get_velocity()
-                if not success:
+                vel_result = self.motor.get_velocity()
+                if not vel_result[0]:
                     rospy.logerr(
                         "[%s] Could not get motor speed. "
                         "Are all wires connected properly?"
@@ -135,14 +135,20 @@ class MotorNode(Node):
                 if counter > hz:
                     counter = 0
                     limit_switch_update = True
-                    lower_limit_switch = self.motor.get_lower_limit_switch()
-                    upper_limit_switch = self.motor.get_upper_limit_switch()
+                    lower_switch_result = self.motor.get_lower_limit_switch()
+                    upper_switch_result = self.motor.get_upper_limit_switch()
             if limit_switch_update:
                 limit_switch_update = False
-                self.publish_limit_switches(lower_limit_switch,
-                                            upper_limit_switch)
-            self.publish_position(increments)
-            self.publish_velocity(rpm)
+                if not (lower_switch_result[0] and upper_switch_result[0]):
+                    rospy.logerr("[%s] Could not get limit switch states.",
+                                 rospy.get_name())
+                else:
+                    self.publish_limit_switches(lower_switch_result[1],
+                                                upper_switch_result[1])
+            if pos_result[0]:
+                self.publish_position(pos_result[1])
+            if vel_result[0]:
+                self.publish_velocity(vel_result[1])
 
             if not self.emergency_stop:
                 if self.position_setpoint_flag:

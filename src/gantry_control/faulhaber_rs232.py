@@ -79,8 +79,9 @@ class Motor(BaseMotor):
         return self._read_answer()
 
     def get_operating_status(self):
-        self._send_command(GET_OPERATING_STATUS)
-        ans = int(self._read_answer())
+        success, ans = self._get_int(GET_OPERATING_STATUS)
+        if not success:
+            return False, None
         ret = {}
         ret["homing_running"] = bool((1 << 0) & ans)
         ret["program_running"] = bool((1 << 1) & ans)
@@ -95,36 +96,18 @@ class Motor(BaseMotor):
         ret["status_input_3"] = bool((1 << 10) & ans)
         ret["position_attained"] = bool((1 << 16) & ans)
         ret["continuous_current_limit"] = bool((1 << 17) & ans)
-        return ret
+        return True, ret
 
     def is_homing(self):
-        self._send_command(GET_OPERATING_STATUS)
-        ans = int(self._read_answer())
-        return bool((1 << 0) & ans)
-
-    def get_mode(self):
-        self._send_command(GET_MODE)
-        ans = self._read_answer()
-        if ans == b"c":
-            return "CONTMOD"
-        elif ans == b"s":
-            return "STEPMOD"
-        elif ans == b"a":
-            return "APCMOD"
-        elif ans == b"h":
-            return "ENCMOD"
-        elif ans == b"e":
-            return "ENCSPEED"
-        elif ans == b"g":
-            return "GEARMOD"
-        elif ans == b"v":
-            return "VOLTMOD"
-        else:
-            return "Unknown: '{}'".format(ans)
+        success, ans = self.get_int(GET_OPERATING_STATUS)
+        if not success:
+            return False, None
+        return True, bool((1 << 0) & ans)
 
     def get_config_status(self):
-        self._send_command(GET_CONFIG_STATUS)
-        ans = int(self._read_answer())
+        success, ans = self._get_int(GET_CONFIG_STATUS)
+        if not success:
+            return False, None
         ret = {}
         ret["automatic_response"] = ((ans >> CST_AUTOMATIC_RESPONSE_BITSHIFT)
                                      & CST_AUTOMATIC_REPONSE_BITMASK)
@@ -141,20 +124,25 @@ class Motor(BaseMotor):
                                   & CST_POSITION_LIMITS_BITMASK)
         ret["sin_commutation"] = ((ans >> CST_SIN_COMMUTATION_BITSHIFT)
                                   & CST_SIN_COMMUTATION_BITMASK)
-        return ret
+        return True, ret
 
     def get_lower_limit_switch(self):
-        ost = self.get_operating_status()
+        success, ost = self.get_operating_status()
+        if not success:
+            return False, None
         status = ost["status_input_1"]
-        return status
+        return True, status
 
     def get_upper_limit_switch(self):
-        ost = self.get_operating_status()
+        success, ost = self.get_operating_status()
+        if not success:
+            return False, None
         status = ost["status_input_2"]
-        return status
+        return True, status
 
     def is_enabled(self):
-        self._send_command(self.CONTROL_STATUS)
-        ans = int(self._read_answer())
+        success, ans = self._get_int(self.CONTROL_STATUS)
+        if not success:
+            return False, None
         status = bool((1 << 10) & ans)
-        return status
+        return True, status

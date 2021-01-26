@@ -12,23 +12,43 @@ class Motor(BaseMotor):
     def is_homing(self):
         self._send_command(self.GET_ACTUAL_STATUS)
         ans = self._read_answer()
-        status = bool(int(ans[3]))
-        return status
+        try:
+            status = bool(int(ans[3]))
+        except IndexError:
+            return False, None
+        except ValueError:
+            return False, None
+        return True, status
 
     def is_enabled(self):
         self._send_command(self.GET_STATUS)
         ans = self._read_answer()
-        status = bool(int(ans[3]))
-        return status
+        try:
+            status = bool(int(ans[3]))
+        except IndexError:
+            return False, None
+        except ValueError:
+            return False, None
+        return True, status
 
     def get_lower_limit_switch(self):
         self._send_command(self.GET_STATUS)
         ans = self._read_answer()
-        lls_status = bool(int(ans[6]))
-        return lls_status
+        try:
+            lls_status = bool(int(ans[6]))
+        except IndexError:
+            return False, None
+        except ValueError:
+            return False, None
+        return True, lls_status
 
     def get_upper_limit_switch(self):
         self._send_command(self.GET_ACTUAL_STATUS)
         ans = self._read_answer()
-        uls_status = bool(int(ans[0]))
-        return uls_status
+        try:
+            uls_status = bool(int(ans[0]))
+        except IndexError:
+            return False, None
+        except ValueError:
+            return False, None
+        return True, uls_status
