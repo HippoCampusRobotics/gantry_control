@@ -1,17 +1,23 @@
 #!/usr/bin/env python
 import rospy
-import time
 from gantry_control import faulhaber_rs232, mcbl2805
 from hippocampus_common.node import Node
 from std_msgs.msg import Float64
-from hippocampus_msgs.msg import GantryMotorPosition, GantryMotorVelocity, GantryMotorLimitSwitches
-from hippocampus_msgs.srv import GetFloat, GetFloatResponse, SetFloat, SetFloatResponse
+from hippocampus_msgs.msg import (GantryMotorPosition, GantryMotorVelocity,
+                                  GantryMotorLimitSwitches)
+from hippocampus_msgs.srv import (GetFloat, GetFloatResponse, SetFloat,
+                                  SetFloatResponse)
 from std_srvs.srv import Trigger, TriggerResponse
 import threading
 
 
 class MotorNode(Node):
     def __init__(self, name):
+        """This node provides a ROS interface for the motors.
+
+        Args:
+            name (str): Name of the node.
+        """
         super(MotorNode, self).__init__(name=name)
 
         self.data_lock = threading.RLock()
@@ -89,8 +95,8 @@ class MotorNode(Node):
             motor = faulhaber_rs232.Motor(port, baud, timeout)
 
         with self.motor_lock:
-            success, increments = motor.get_position()
-        self.position_setpoint = dict(position=(float(increments) /
+            pos_result = motor.get_position()
+        self.position_setpoint = dict(position=(float(pos_result.value) /
                                                 self.increments_per_meter),
                                       relative=False)
         return motor
@@ -121,13 +127,13 @@ class MotorNode(Node):
             counter += 1
             with self.motor_lock:
                 pos_result = self.motor.get_position()
-                if not pos_result[0]:
+                if not pos_result.success:
                     rospy.logerr(
                         "[%s] Could not get motor position. "
                         "Are all wires connected properly? "
                         "Is the motor powered?", rospy.get_name())
                 vel_result = self.motor.get_velocity()
-                if not vel_result[0]:
+                if not vel_result.success:
                     rospy.logerr(
                         "[%s] Could not get motor speed. "
                         "Are all wires connected properly?"
@@ -139,16 +145,17 @@ class MotorNode(Node):
                     upper_switch_result = self.motor.get_upper_limit_switch()
             if limit_switch_update:
                 limit_switch_update = False
-                if not (lower_switch_result[0] and upper_switch_result[0]):
+                if not (lower_switch_result.success
+                        and upper_switch_result.success):
                     rospy.logerr("[%s] Could not get limit switch states.",
                                  rospy.get_name())
                 else:
-                    self.publish_limit_switches(lower_switch_result[1],
-                                                upper_switch_result[1])
-            if pos_result[0]:
-                self.publish_position(pos_result[1])
-            if vel_result[0]:
-                self.publish_velocity(vel_result[1])
+                    self.publish_limit_switches(lower_switch_result.value,
+                                                upper_switch_result.value)
+            if pos_result.success:
+                self.publish_position(pos_result.value)
+            if vel_result.success:
+                self.publish_velocity(vel_result.value)
 
             if not self.emergency_stop:
                 if self.position_setpoint_flag:
@@ -196,10 +203,11 @@ class MotorNode(Node):
 
     def serve_get_max_velocity(self, req):
         with self.motor_lock:
-            success, max_velocity = (float(self.motor.get_max_velocity()) *
-                                     self.meter_per_second_per_rpm)
-
-        return GetFloatResponse(value=max_velocity, success=True)
+            result = (float(self.motor.get_max_velocity()) *
+                      self.meter_per_second_per_rpm)
+        if result.success:
+            return GetFloatResponse(value=result.value, success=True)
+        return GetFloatResponse(success=True)
 
     def serve_set_max_velocity(self, req):
         with self.motor_lock:

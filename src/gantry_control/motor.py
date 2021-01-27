@@ -2,7 +2,24 @@ import serial
 import abc
 
 
+class Result(object):
+    def __init__(self, success=False, value=None, message=None):
+        self.success = success
+        self.value = value
+        if message is not None:
+            self.message = message
+        else:
+            self.message = ""
+
+
 class BaseMotor(object):
+    """A base class providing an API for the Faulhaber motors of the gantry.
+
+    Args:
+        port (str): Name of the motor's serial port.
+        baud (int): Baud of the motor's serial interface.
+        timeout (float): Timeout for the serial interface.
+    """
     ENABLE = "EN"
     DISABLE = "DI"
     GET_POSITION = "POS"
@@ -53,11 +70,11 @@ class BaseMotor(object):
         """Reads the current position of the motor.
 
         Returns:
-            (bool, int): Returns success flag and position of motor in
-                increments.
+            (Result): Success flag and position in motor increments.
         """
         (success, position) = self._get_int(self.GET_POSITION)
-        return success, position
+        result = Result(success=success, value=position)
+        return result
 
     def set_position_target(self, position, relative=False):
         """Sets a new target position either as absolute or relative value.
@@ -95,19 +112,19 @@ class BaseMotor(object):
         """Gets the current velocity.
 
         Returns:
-            (bool, int): Returns success flag and current velocity in RPM.
+            (Result): Returns success flag and current velocity in RPM.
         """
         (success, velocity) = self._get_int(self.GET_VELOCITY)
-        return success, velocity
+        return Result(success=success, value=velocity)
 
     def get_target_velocity(self):
         """Gets the target velocity.
 
         Returns:
-            (bool, int): Returns success flag and target velocity in RPM.
+            (Result): Returns success flag and target velocity in RPM.
         """
         (success, velocity) = self._get_int(self.GET_TARGET_VELOCITY)
-        return success, velocity
+        return Result(success=success, value=velocity)
 
     def move_to_target_position(self, position=None, relative=False):
         """Moves to the specified position.
@@ -137,10 +154,10 @@ class BaseMotor(object):
         """Gets the maximal velocity for position control mode.
 
         Returns:
-            (bool, int): Success flag and maximal velocity in RPM of the motor.
+            (Result): Success flag and maximal velocity in RPM of the motor.
         """
         (success, velocity) = self._get_int(self.GET_MAX_VELOCITY)
-        return success, velocity
+        return Result(success=success, value=velocity)
 
     def set_acceleration(self, value):
         """Sets the acceleration.
@@ -154,10 +171,10 @@ class BaseMotor(object):
         """Gets the acceleration.
 
         Returns:
-            (bool, int): Success flag and acceleration in Rev/s^2.
+            (Result): Success flag and acceleration in Rev/s^2.
         """
         (success, acceleration) = self._get_int(self.GET_ACCELERATION)
-        return success, acceleration
+        return Result(success=success, value=acceleration)
 
     @abc.abstractmethod
     def is_homing(self):

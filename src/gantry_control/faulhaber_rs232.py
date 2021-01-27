@@ -1,6 +1,4 @@
-import serial
-import time
-from gantry_control.motor import BaseMotor
+from gantry_control.motor import BaseMotor, Result
 
 GET_TYPE = "GTYP"
 GET_SERIAL = "GSER"
@@ -56,32 +54,10 @@ class Motor(BaseMotor):
     def __init__(self, port, baud, timeout):
         super(Motor, self).__init__(port=port, baud=baud, timeout=timeout)
 
-    def get_motor_info(self):
-        motor_type = self.get_type()
-        motor_serial = self.get_serial()
-        motor_version = self.get_version()
-        return dict(type=motor_type, serial=motor_serial, version=motor_version)
-
-    def get_type(self):
-        self._send_command(GET_TYPE)
-        return self._read_answer()
-
-    def get_temperature(self):
-        self._send_command(GET_TEMPERATURE)
-        return self._read_answer()
-
-    def get_serial(self):
-        self._send_command(GET_SERIAL)
-        return self._read_answer()
-
-    def get_version(self):
-        self._send_command(GET_VERSION)
-        return self._read_answer()
-
     def get_operating_status(self):
         success, ans = self._get_int(GET_OPERATING_STATUS)
         if not success:
-            return False, None
+            return Result(success=False)
         ret = {}
         ret["homing_running"] = bool((1 << 0) & ans)
         ret["program_running"] = bool((1 << 1) & ans)
@@ -96,18 +72,18 @@ class Motor(BaseMotor):
         ret["status_input_3"] = bool((1 << 10) & ans)
         ret["position_attained"] = bool((1 << 16) & ans)
         ret["continuous_current_limit"] = bool((1 << 17) & ans)
-        return True, ret
+        return Result(success=True, value=ret)
 
     def is_homing(self):
         success, ans = self.get_int(GET_OPERATING_STATUS)
         if not success:
-            return False, None
-        return True, bool((1 << 0) & ans)
+            return Result(success=False)
+        return Result(success=True, value=bool((1 << 0) & ans))
 
     def get_config_status(self):
         success, ans = self._get_int(GET_CONFIG_STATUS)
         if not success:
-            return False, None
+            return Result(success=False)
         ret = {}
         ret["automatic_response"] = ((ans >> CST_AUTOMATIC_RESPONSE_BITSHIFT)
                                      & CST_AUTOMATIC_REPONSE_BITMASK)
@@ -124,25 +100,25 @@ class Motor(BaseMotor):
                                   & CST_POSITION_LIMITS_BITMASK)
         ret["sin_commutation"] = ((ans >> CST_SIN_COMMUTATION_BITSHIFT)
                                   & CST_SIN_COMMUTATION_BITMASK)
-        return True, ret
+        return Result(success=True, value=ret)
 
     def get_lower_limit_switch(self):
-        success, ost = self.get_operating_status()
-        if not success:
-            return False, None
-        status = ost["status_input_1"]
-        return True, status
+        result = self.get_operating_status()
+        if not result.success:
+            return Result(success=False)
+        status = result.value["status_input_1"]
+        return Result(success=True, value=status)
 
     def get_upper_limit_switch(self):
-        success, ost = self.get_operating_status()
-        if not success:
-            return False, None
-        status = ost["status_input_2"]
-        return True, status
+        result = self.get_operating_status()
+        if not result.success:
+            return Result(success=False)
+        status = result.value["status_input_2"]
+        return Result(success=True, value=status)
 
     def is_enabled(self):
-        success, ans = self._get_int(self.CONTROL_STATUS)
-        if not success:
-            return False, None
-        status = bool((1 << 10) & ans)
-        return True, status
+        result = self._get_int(self.CONTROL_STATUS)
+        if not result.success:
+            return Result(success=False)
+        status = bool((1 << 10) & result.value)
+        return Result(success=True, value=status)

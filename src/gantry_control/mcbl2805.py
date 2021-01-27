@@ -1,5 +1,4 @@
-import serial
-from gantry_control.motor import BaseMotor
+from gantry_control.motor import BaseMotor, Result
 
 
 class Motor(BaseMotor):
@@ -15,10 +14,10 @@ class Motor(BaseMotor):
         try:
             status = bool(int(ans[3]))
         except IndexError:
-            return False, None
+            return Result(success=False)
         except ValueError:
-            return False, None
-        return True, status
+            return Result(success=False)
+        return Result(success=True, value=status)
 
     def is_enabled(self):
         self._send_command(self.GET_STATUS)
@@ -26,29 +25,29 @@ class Motor(BaseMotor):
         try:
             status = bool(int(ans[3]))
         except IndexError:
-            return False, None
+            return Result(success=False)
         except ValueError:
-            return False, None
-        return True, status
+            return Result(success=False)
+        return Result(success=True, value=status)
 
     def get_lower_limit_switch(self):
         self._send_command(self.GET_STATUS)
         ans = self._read_answer()
         try:
-            lls_status = bool(int(ans[6]))
+            status = bool(int(ans[6]))
         except IndexError:
-            return False, None
+            return Result(success=False)
         except ValueError:
-            return False, None
-        return True, lls_status
+            return Result(success=False)
+        return Result(success=True, value=status)
 
     def get_upper_limit_switch(self):
         self._send_command(self.GET_ACTUAL_STATUS)
         ans = self._read_answer()
         try:
-            uls_status = bool(int(ans[0]))
+            status = bool(int(ans[0]))
         except IndexError:
-            return False, None
+            return Result(success=False)
         except ValueError:
-            return False, None
-        return True, uls_status
+            return Result(success=False)
+        return Result(success=True, value=status)
