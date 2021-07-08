@@ -85,7 +85,7 @@ class PathFollower(Node):
 
     def get_path(self):
         path_list = self.get_param("~path")
-        path = np.zeros([len(path_list), 3], dtype=np.float)
+        path = np.zeros([len(path_list), 3], dtype=float)
         for (i, point) in enumerate(path_list):
             path[i] = np.array([point["x"], point["y"], point["z"]])
         return path
@@ -97,7 +97,6 @@ class PathFollower(Node):
         self.start_position = [tmp["x"], tmp["y"], tmp["z"]]
         self.loop = self.get_param("~loop", default=True)
         self.target_index = 0
-
 
     def run(self):
         hz = self.get_param("~rate", default=20.0)
@@ -134,13 +133,13 @@ class PathFollower(Node):
     def serve_update_path(self, req):
         with self.data_lock:
             if self.running:
-                ret = TriggerResponse(False, "Cannot update path while running.")
+                ret = TriggerResponse(False,
+                                      "Cannot update path while running.")
             else:
                 self.update_path()
                 ret = TriggerResponse(True, "Updated the path.")
 
         return ret
-
 
     def update_control(self):
         if self.position_updated:
