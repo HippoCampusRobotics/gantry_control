@@ -7,7 +7,7 @@ from hippocampus_msgs.msg import (GantryMotorPosition, GantryMotorVelocity,
                                   GantryMotorLimitSwitches)
 from hippocampus_msgs.srv import (GetFloat, GetFloatResponse, SetFloat,
                                   SetFloatResponse)
-from std_srvs.srv import Trigger, TriggerResponse
+from std_srvs.srv import Trigger, TriggerResponse, TriggerRequest
 import threading
 
 
@@ -79,7 +79,11 @@ class MotorNode(Node):
                                                       Float64,
                                                       self.on_setpoint_velocity)
 
-    def serve_set_home(self, req):
+    def serve_set_home(self, req: TriggerRequest):
+        caller = req._connection_header.callerid
+        rospy.loginfo(
+            "Setting current position as home position (called from '%s'",
+            caller)
         with self.motor_lock:
             self.motor.set_home()
         return TriggerResponse(True, "Started homing sequence...")
@@ -185,10 +189,9 @@ class MotorNode(Node):
                       self.position_setpoint["position"])
         rospy.loginfo("Relative=%s", self.position_setpoint["relative"])
         with self.motor_lock:
-            rospy.loginfo("Setting target.")
+            rospy.loginfo("Setting target")
             self.motor.set_position_target(
                 increments, relative=self.position_setpoint["relative"])
-            rospy.loginfo("Setting")
             self.motor.move_to_target_position()
 
     def serve_homing(self, req):
