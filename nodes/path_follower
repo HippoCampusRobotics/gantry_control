@@ -149,7 +149,7 @@ class PathFollower(Node):
                 self.look_ahead_square, self.loop)
             if not success:
                 speed = np.array([0.0, 0.0, 0.0])
-                if self.loop:
+                if not self.loop:
                     rospy.loginfo("Reached target position.")
                     self.running = False
                     self.target_index = 0
