@@ -80,9 +80,9 @@ class MotorNode(Node):
                                                       self.on_setpoint_velocity)
 
     def serve_set_home(self, req):
-        caller = req._connection_header.callerid
+        caller = req._connection_header["callerid"]
         rospy.loginfo(
-            "Setting current position as home position (called from '%s'",
+            "Setting current position as home position (called from '%s').",
             caller)
         with self.motor_lock:
             self.motor.set_home()
