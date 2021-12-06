@@ -148,10 +148,16 @@ class PathFollower(Node):
                 self.path, self.target_index, self.current_position,
                 self.look_ahead_square, self.loop)
             if not success:
-                rospy.logerr("Could not find a suitable target position!")
                 speed = np.array([0.0, 0.0, 0.0])
+                if self.loop:
+                    rospy.loginfo("Reached target position.")
+                    self.running = False
+                    self.target_index = 0
+                else:
+                    rospy.logerr_throttle(
+                        1.0, "Could not find a suitable target position!")
             else:
-                rospy.loginfo_throttle(0.5, "Index: %d", self.target_index)
+                rospy.logdebug_throttle(0.5, "Index: %d", self.target_index)
                 speed = get_speed_vector(self.current_position,
                                          self.path[self.target_index],
                                          self.speed)
