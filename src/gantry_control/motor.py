@@ -46,7 +46,8 @@ class BaseMotor(object):
         self.port = serial.Serial(port=port, baudrate=baud, timeout=timeout)
 
     def _send_command(self, command, arg=""):
-        self.port.write(b"{}{}\r".format(command, arg))
+        s = f"{command}{arg}\r"
+        self.port.write(s.encode())
 
     def _read_answer(self):
         return self.port.readline().rstrip()
