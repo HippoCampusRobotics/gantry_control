@@ -34,6 +34,8 @@ class BaseMotor(object):
     GET_MAX_VELOCITY = "GSP"
     SET_ACCELERATION = "AC"
     GET_ACCELERATION = "GAC"
+    SET_DECELERATION = "DEC"
+    GET_DECELERATION = "GDEC"
 
     SET_VELOCITY = "V"
     GET_TARGET_VELOCITY = "GV"
@@ -159,7 +161,7 @@ class BaseMotor(object):
         (success, velocity) = self._get_int(self.GET_MAX_VELOCITY)
         return Result(success=success, value=velocity)
 
-    def set_acceleration(self, value):
+    def set_acceleration_limit(self, value):
         """Sets the acceleration.
 
         Args:
@@ -167,7 +169,7 @@ class BaseMotor(object):
         """
         self._send_command(self.SET_ACCELERATION, int(value))
 
-    def get_acceleration(self):
+    def get_acceleration_limit(self):
         """Gets the acceleration.
 
         Returns:
@@ -175,6 +177,13 @@ class BaseMotor(object):
         """
         (success, acceleration) = self._get_int(self.GET_ACCELERATION)
         return Result(success=success, value=acceleration)
+
+    def set_deceleration_limit(self, value):
+        self._send_command(self.SET_DECELERATION, int(value))
+
+    def get_deceleration_limit(self):
+        (success, deceleration) = self._get_int(self.GET_DECELERATION)
+        return Result(success=success, value=deceleration)
 
     @abc.abstractmethod
     def is_homing(self):
