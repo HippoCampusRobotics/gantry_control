@@ -50,7 +50,7 @@ class BaseMotor(object):
         self.port.write(s.encode())
 
     def _read_answer(self):
-        return self.port.readline().rstrip()
+        return self.port.readline().rstrip().decode()
 
     def _get_int(self, command, arg=""):
         self._send_command(command, arg)
