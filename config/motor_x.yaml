@@ -3,6 +3,6 @@ rate: 30.0
 serial_port: "/dev/motor_x"
 baud: 19200
 timeout: 1.0
-increments_per_meter: 591125
-meter_per_second_per_rpm: 0.000028249
+increments_per_length_unit: 591125
+rpm_per_velocity_unit: 35399.48316754575
 nominal_rpm: 7700

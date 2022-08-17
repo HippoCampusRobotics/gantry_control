@@ -5,8 +5,10 @@ from hippocampus_common.node import Node
 from std_msgs.msg import Float64
 from hippocampus_msgs.msg import (GantryMotorPosition, GantryMotorVelocity,
                                   GantryMotorLimitSwitches)
-from hippocampus_msgs.srv import (GetFloat, GetFloatResponse, SetFloat,
-                                  SetFloatResponse)
+# from hippocampus_msgs.srv import (GetFloat, GetFloatResponse, SetFloat,
+#                                   SetFloatResponse)
+from hippocampus_msgs.srv import (GantryGetFloat, GantryGetFloatResponse,
+                                  GantrySetFloat, GantrySetFloatResponse)
 from std_srvs.srv import Trigger, TriggerResponse
 import threading
 
@@ -30,9 +32,9 @@ class MotorNode(Node):
 
         self.emergency_stop = False
 
-        self.increments_per_meter = self.get_param("~increments_per_meter")
-        self.meter_per_second_per_rpm = self.get_param(
-            "~meter_per_second_per_rpm")
+        self.increments_per_length_unit = self.get_param(
+            "~increments_per_length_unit")
+        self.rpm_per_velocity_unit = self.get_param("~rpm_per_velocity_unit")
 
         self.motor = self.init_motor()
 
@@ -52,21 +54,23 @@ class MotorNode(Node):
 
         self.set_home_position = rospy.Service("~set_home_position", Trigger,
                                                self.serve_set_home)
-        self.get_max_velocity = rospy.Service("~get_velocity_limit", GetFloat,
-                                              self.serve_get_velocity_limit)
-        self.set_max_velocity = rospy.Service("~set_velocity_limit", SetFloat,
-                                              self.serve_set_velocity_limit)
+        self.get_velocity_limit = rospy.Service("~get_velocity_limit",
+                                                GantryGetFloat,
+                                                self.serve_get_velocity_limit)
+        self.set_velocity_limit = rospy.Service("~set_velocity_limit",
+                                                GantrySetFloat,
+                                                self.serve_set_velocity_limit)
         self.get_acceleration = rospy.Service("~get_acceleration_limit",
-                                              GetFloat,
+                                              GantryGetFloat,
                                               self.serve_get_acceleration_limit)
         self.set_acceleration = rospy.Service("~set_acceleration_limit",
-                                              SetFloat,
+                                              GantrySetFloat,
                                               self.serve_set_acceleration_limit)
         self.get_deceleration = rospy.Service("~get_deceleration_limit",
-                                              GetFloat,
+                                              GantryGetFloat,
                                               self.serve_get_deceleration_limit)
         self.set_deceleration = rospy.Service("~set_deceleration_limit",
-                                              SetFloat,
+                                              GantrySetFloat,
                                               self.serve_set_deceleration_limit)
         self.estop_service = rospy.Service("~emergency_stop", Trigger,
                                            self.serve_emergency_stop)
@@ -112,9 +116,10 @@ class MotorNode(Node):
 
         with self.motor_lock:
             pos_result = motor.get_position()
-        self.position_setpoint = dict(position=(float(pos_result.value) /
-                                                self.increments_per_meter),
-                                      relative=False)
+        self.position_setpoint = dict(
+            position=(float(pos_result.value) /
+                      self.increments_per_length_unit),
+            relative=False)
         return motor
 
     def on_setpoint_position(self, msg):
@@ -190,13 +195,13 @@ class MotorNode(Node):
 
     def move_with_velocity(self):
         with self.motor_lock:
-            rpm = int(self.velocity_setpoint["velocity"] /
-                      self.meter_per_second_per_rpm)
+            rpm = int(self.velocity_setpoint["velocity"] *
+                      self.rpm_per_velocity_unit)
             self.motor.set_velocity(rpm)
 
     def move_to_position(self):
         increments = int(self.position_setpoint["position"] *
-                         self.increments_per_meter)
+                         self.increments_per_length_unit)
         rospy.loginfo("Moving to %dinc / %.2fm", increments,
                       self.position_setpoint["position"])
         rospy.loginfo("Relative=%s", self.position_setpoint["relative"])
@@ -219,37 +224,55 @@ class MotorNode(Node):
     def serve_get_velocity_limit(self, req):
         with self.motor_lock:
             result = self.motor.get_velocity_limit()
-        val = float(result.value * self.meter_per_second_per_rpm)
-        return GetFloatResponse(value=val, success=result.success)
+        val = float(result.value / self.rpm_per_velocity_unit)
+        return GantryGetFloatResponse(driveside_value=val,
+                                      motorside_value=result.value,
+                                      success=result.success)
 
     def serve_set_velocity_limit(self, req):
+        if req.motorside_value != 0:
+            val = req.motorside_value
+        else:
+            val = req.driveside_value * self.rpm_per_velocity_unit
         with self.motor_lock:
-            self.motor.set_velocity_limit(
-                int(req.value / self.meter_per_second_per_rpm))
-        return SetFloatResponse(success=True)
+            self.motor.set_velocity_limit(val)
+        return GantrySetFloatResponse(success=True)
 
     def serve_get_acceleration_limit(self, req):
         with self.motor_lock:
             result = self.motor.get_acceleration_limit()
-        if result.success:
-            return GetFloatResponse(value=float(result.value), success=True)
-        return GetFloatResponse(success=False)
+        driveside_value = result.value / self.rpm_per_velocity_unit
+        motorside_value = result.value
+        return GantryGetFloatResponse(motorside_value=motorside_value,
+                                      driveside_value=driveside_value,
+                                      success=result.success)
 
     def serve_set_acceleration_limit(self, req):
+        if req.motorside_value != 0:
+            val = req.motorside_value
+        else:
+            val = req.driveside_value * self.rpm_per_velocity_unit
         with self.motor_lock:
-            self.motor.set_acceleration_limit(int(req.value))
-        return SetFloatResponse(success=True)
+            self.motor.set_acceleration_limit(val)
+        return GantrySetFloatResponse(success=True)
 
     def serve_get_deceleration_limit(self, req):
         with self.motor_lock:
             result = self.motor.get_deceleration_limit()
-        return GetFloatResponse(value=float(result.value),
-                                success=result.success)
+        driveside_value = result.value / self.rpm_per_velocity_unit
+        motorside_value = result.value
+        return GantryGetFloatResponse(motorside_value=motorside_value,
+                                      driveside_value=driveside_value,
+                                      success=result.success)
 
     def serve_set_deceleration_limit(self, req):
+        if req.motorside_value != 0:
+            val = req.motorside_value
+        else:
+            val = req.driveside_value * self.rpm_per_velocity_unit
         with self.motor_lock:
-            self.motor.set_deceleration_limit(req.value)
-        return SetFloatResponse(success=True)
+            self.motor.set_deceleration_limit(val)
+        return GantrySetFloatResponse(success=True)
 
     def serve_emergency_stop(self, req):
         with self.motor_lock:
@@ -274,13 +297,13 @@ class MotorNode(Node):
 
     def publish_position(self, increments):
         msg = GantryMotorPosition()
-        msg.position = float(increments) / self.increments_per_meter
+        msg.position = float(increments) / self.increments_per_length_unit
         msg.increments = increments
         self.position_pub.publish(msg)
 
     def publish_velocity(self, rpm):
         msg = GantryMotorVelocity()
-        msg.velocity = float(rpm) * self.meter_per_second_per_rpm
+        msg.velocity = float(rpm) / self.rpm_per_velocity_unit
         msg.rpm = rpm
         self.velocity_pub.publish(msg)
 
