@@ -145,16 +145,16 @@ class BaseMotor(object):
                 self._send_command(self.SET_POSITION_ABSOLUTE, position)
         self._send_command(self.MOVE_POSITION)
 
-    def set_max_velocity(self, value):
-        """Sets the maximal velocity for position control mode.
+    def set_velocity_limit(self, value):
+        """Sets the maximal velocity for all modes.
 
         Args:
             value (int): Maxmimal velocity in RPM of the motor.
         """
         self._send_command(self.SET_MAX_VELOCITY, int(value))
 
-    def get_max_velocity(self):
-        """Gets the maximal velocity for position control mode.
+    def get_velocity_limit(self):
+        """Gets the maximal velocity for all modes.
 
         Returns:
             (Result): Success flag and maximal velocity in RPM of the motor.

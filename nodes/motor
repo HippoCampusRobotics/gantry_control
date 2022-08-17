@@ -12,7 +12,6 @@ import threading
 
 
 class MotorNode(Node):
-
     def __init__(self, name):
         """This node provides a ROS interface for the motors.
 
@@ -53,22 +52,22 @@ class MotorNode(Node):
 
         self.set_home_position = rospy.Service("~set_home_position", Trigger,
                                                self.serve_set_home)
-        self.get_max_velocity = rospy.Service("~get_max_velocity", GetFloat,
-                                              self.serve_get_max_velocity)
-        self.set_max_velocity = rospy.Service("~set_max_velocity", SetFloat,
-                                              self.serve_set_max_velocity)
-        self.get_acceleration = rospy.Service(
-            "~get_acceleration_limit", GetFloat,
-            self.serve_get_acceleration_limit)
-        self.set_acceleration = rospy.Service(
-            "~set_acceleration_limit", SetFloat,
-            self.serve_set_acceleration_limit)
-        self.get_deceleration = rospy.Service(
-            "~get_deceleration_limit", GetFloat,
-            self.serve_get_deceleration_limit)
-        self.set_deceleration = rospy.Service(
-            "~set_deceleration_limit", SetFloat,
-            self.serve_set_deceleration_limit)
+        self.get_max_velocity = rospy.Service("~get_velocity_limit", GetFloat,
+                                              self.serve_get_velocity_limit)
+        self.set_max_velocity = rospy.Service("~set_velocity_limit", SetFloat,
+                                              self.serve_set_velocity_limit)
+        self.get_acceleration = rospy.Service("~get_acceleration_limit",
+                                              GetFloat,
+                                              self.serve_get_acceleration_limit)
+        self.set_acceleration = rospy.Service("~set_acceleration_limit",
+                                              SetFloat,
+                                              self.serve_set_acceleration_limit)
+        self.get_deceleration = rospy.Service("~get_deceleration_limit",
+                                              GetFloat,
+                                              self.serve_get_deceleration_limit)
+        self.set_deceleration = rospy.Service("~set_deceleration_limit",
+                                              SetFloat,
+                                              self.serve_set_deceleration_limit)
         self.estop_service = rospy.Service("~emergency_stop", Trigger,
                                            self.serve_emergency_stop)
         self.is_homing_service = rospy.Service("~is_homing", Trigger,
@@ -88,8 +87,9 @@ class MotorNode(Node):
         self.position_setpoint_relative_sub = rospy.Subscriber(
             "~setpoint_position/relative", Float64,
             self.on_setpoint_position_relative)
-        self.velocity_setpoint_sub = rospy.Subscriber(
-            "~setpoint_velocity", Float64, self.on_setpoint_velocity)
+        self.velocity_setpoint_sub = rospy.Subscriber("~setpoint_velocity",
+                                                      Float64,
+                                                      self.on_setpoint_velocity)
 
     def serve_set_home(self, req):
         caller = req._connection_header["callerid"]
@@ -216,17 +216,15 @@ class MotorNode(Node):
             is_homing = self.motor.is_homing()
         return TriggerResponse(is_homing, "Homing status")
 
-    def serve_get_max_velocity(self, req):
+    def serve_get_velocity_limit(self, req):
         with self.motor_lock:
-            result = (float(self.motor.get_max_velocity()) *
-                      self.meter_per_second_per_rpm)
-        if result.success:
-            return GetFloatResponse(value=result.value, success=True)
-        return GetFloatResponse(success=True)
+            result = self.motor.get_velocity_limit()
+        val = float(result.value * self.meter_per_second_per_rpm)
+        return GetFloatResponse(value=val, success=result.success)
 
-    def serve_set_max_velocity(self, req):
+    def serve_set_velocity_limit(self, req):
         with self.motor_lock:
-            self.motor.set_max_velocity(
+            self.motor.set_velocity_limit(
                 int(req.value / self.meter_per_second_per_rpm))
         return SetFloatResponse(success=True)
 
@@ -245,8 +243,9 @@ class MotorNode(Node):
     def serve_get_deceleration_limit(self, req):
         with self.motor_lock:
             result = self.motor.get_deceleration_limit()
-        return GetFloatResponse(value=float(result.value), success=result.success)
-    
+        return GetFloatResponse(value=float(result.value),
+                                success=result.success)
+
     def serve_set_deceleration_limit(self, req):
         with self.motor_lock:
             self.motor.set_deceleration_limit(req.value)
@@ -261,8 +260,7 @@ class MotorNode(Node):
     def serve_release_emergency_stop(self, req):
         with self.motor_lock:
             self.emergency_stop = False
-        return TriggerResponse(success=True,
-                               message="Released emergency stop.")
+        return TriggerResponse(success=True, message="Released emergency stop.")
 
     def serve_enable(self, req):
         with self.motor_lock:
