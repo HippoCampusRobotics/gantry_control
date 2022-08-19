@@ -1,0 +1,8 @@
+legacy: false
+rate: 30.0
+serial_port: "/dev/ttyUSB0"
+baud: 19200
+timeout: 1.0
+increments_per_length_unit: 59206.25421764983 # length unit: rad
+rpm_per_velocity_unit: 1184.147700143244
+nominal_rpm: 4890
