@@ -1,5 +1,4 @@
 import serial
-import abc
 
 
 class Result(object):
@@ -37,10 +36,14 @@ class BaseMotor(object):
     SET_DECELERATION = "DEC"
     GET_DECELERATION = "GDEC"
 
+    GET_TYPE = "GTYP"
+    GET_SERIAL = "GSER"
+
+    GET_IO_CONFIG = "IOC"
+
     SET_VELOCITY = "V"
     GET_TARGET_VELOCITY = "GV"
     GET_VELOCITY = "GN"
-    __metaclass__ = abc.ABCMeta
 
     def __init__(self, port, baud, timeout):
         self.port = serial.Serial(port=port, baudrate=baud, timeout=timeout)
@@ -62,6 +65,14 @@ class BaseMotor(object):
             value = 0
             success = False
         return success, value
+
+    def get_type(self):
+        self._send_command(self.GET_TYPE)
+        return self._read_answer()
+
+    def get_serial(self):
+        self._send_command(self.GET_SERIAL)
+        return self._read_answer()
 
     def enable(self):
         self._send_command(self.ENABLE)
@@ -186,18 +197,14 @@ class BaseMotor(object):
         (success, deceleration) = self._get_int(self.GET_DECELERATION)
         return Result(success=success, value=deceleration)
 
-    @abc.abstractmethod
     def is_homing(self):
-        pass
+        raise NotImplementedError
 
-    @abc.abstractmethod
     def get_lower_limit_switch(self):
-        pass
+        raise NotImplementedError
 
-    @abc.abstractmethod
     def get_upper_limit_switch(self):
-        pass
+        raise NotImplementedError
 
-    @abc.abstractmethod
     def is_enabled(self):
-        pass
+        raise NotImplementedError

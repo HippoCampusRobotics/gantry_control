@@ -1,4 +1,3 @@
-legacy: true
 rate: 30.0
 serial_port: "/dev/motor_x"
 baud: 19200

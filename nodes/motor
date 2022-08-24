@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import rospy
-from gantry_control import faulhaber_rs232, mcbl2805
+import gantry_control
 from hippocampus_common.node import Node
 from std_msgs.msg import Float64
 from hippocampus_msgs.msg import (GantryMotorPosition, GantryMotorVelocity,
@@ -108,12 +108,7 @@ class MotorNode(Node):
         port = self.get_param("~serial_port")
         baud = self.get_param("~baud", 19200)
         timeout = self.get_param("~timeout", 1.0)
-        legacy = self.get_param("~legacy", True)
-        if legacy:
-            motor = mcbl2805.Motor(port, baud, timeout)
-        else:
-            motor = faulhaber_rs232.Motor(port, baud, timeout)
-
+        motor = gantry_control.create(port=port, baud=baud, timeout=timeout)
         with self.motor_lock:
             pos_result = motor.get_position()
         self.position_setpoint = dict(
