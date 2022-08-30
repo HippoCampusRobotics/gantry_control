@@ -208,3 +208,6 @@ class BaseMotor(object):
 
     def is_enabled(self):
         raise NotImplementedError
+
+    def is_position_reached(self):
+        raise NotImplementedError

@@ -51,3 +51,10 @@ class Motor(BaseMotor):
         except ValueError:
             return Result(success=False)
         return Result(success=True, value=status)
+
+    def is_position_reached(self):
+        self._send_command(self.GET_STATUS)
+        ans = self._read_answer()
+        if len(ans) == 7:
+            return Result(success=True, value=bool(int(ans[4])))
+        return Result(success=False)
