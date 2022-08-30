@@ -79,7 +79,7 @@ class MotorNode(Node):
         self.is_homing_service = rospy.Service("~is_homing", Trigger,
                                                self.serve_is_homing)
         self.is_position_reached_service = rospy.Service(
-            "~is_position_reached", Trigger, self.serve_is_position_reached)
+            "~is_position_reached", GetBool, self.serve_is_position_reached)
 
         self.enable_service = rospy.Service("~enable", Trigger,
                                             self.serve_enable)
