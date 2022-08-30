@@ -300,7 +300,7 @@ class MotorNode(Node):
             self.motor.disable()
         return TriggerResponse(success=True, message="Disabled Motor.")
 
-    def serve_position_reached(self, req):
+    def serve_is_position_reached(self, req):
         with self.motor_lock:
             result = self.motor.is_position_reached()
         return GetBoolResponse(success=result.success, value=result.value)
