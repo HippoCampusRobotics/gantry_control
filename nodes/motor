@@ -9,7 +9,8 @@ from hippocampus_msgs.msg import (GantryMotorPosition, GantryMotorVelocity,
 # from hippocampus_msgs.srv import (GetFloat, GetFloatResponse, SetFloat,
 #                                   SetFloatResponse)
 from hippocampus_msgs.srv import (GantryGetFloat, GantryGetFloatResponse,
-                                  GantrySetFloat, GantrySetFloatResponse)
+                                  GantrySetFloat, GantrySetFloatResponse,
+                                  GetBool, GetBoolResponse)
 from std_srvs.srv import Trigger, TriggerResponse
 import threading
 
@@ -77,6 +78,8 @@ class MotorNode(Node):
                                            self.serve_emergency_stop)
         self.is_homing_service = rospy.Service("~is_homing", Trigger,
                                                self.serve_is_homing)
+        sef.is_position_reached_service = rospy.Service(
+            "~is_position_reached", Trigger, self.serve_is_position_reached)
 
         self.enable_service = rospy.Service("~enable", Trigger,
                                             self.serve_enable)
@@ -296,6 +299,11 @@ class MotorNode(Node):
         with self.motor_lock:
             self.motor.disable()
         return TriggerResponse(success=True, message="Disabled Motor.")
+
+    def serve_position_reached(self, req):
+        with self.motor_lock:
+            result = self.motor.is_position_reached()
+        return GetBoolResponse(success=result.success, value=result.value)
 
     def publish_position(self, increments):
         msg = GantryMotorPosition()

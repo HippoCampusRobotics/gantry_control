@@ -122,3 +122,10 @@ class Motor(BaseMotor):
             return Result(success=False)
         status = bool((1 << 10) & result.value)
         return Result(success=True, value=status)
+
+    def is_position_reached(self):
+        result = self.get_operating_status()
+        if not result.success:
+            return Result(success=False)
+        status = result.value["position_attained"]
+        return Result(success=True, value=status)
