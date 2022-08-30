@@ -3,7 +3,7 @@
     <machine name="gantry" address="gantry.local" user="pi" env-loader="~/catkin_ws/env.sh" default="$(arg remote)" />
     <group ns="gantry">
         <include file="$(find gantry_control)/launch/motor.launch">
-            <arg name="axis" value="yaw" />
+            <arg name="axis" value="blue" />
         </include>
     </group>
 </launch>
