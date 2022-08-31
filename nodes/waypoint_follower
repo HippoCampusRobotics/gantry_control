@@ -1,0 +1,231 @@
+#!/usr/bin/env python
+from xmlrpc.client import FastUnmarshaller
+import rospy
+import numpy as np
+import threading
+
+from hippocampus_common.node import Node
+
+from std_msgs.msg import Float64, Bool
+from geographic_msgs.msg import Point
+from hippocampus_msgs.msg import GantryMotorPosition
+from hippocampus_msgs.srv import GetBool, GetBoolResponse
+from std_srvs.srv import Trigger, TriggerResponse
+
+
+class WayPointFollower(Node):
+
+    def __init__(self, name):
+        super(WayPointFollower, self).__init__(name=name)
+
+        self.data_lock = threading.RLock()
+        self.waypoints = self.get_path()
+        tmp = self.get_param("~start_position",
+                             default=dict(x=1.0, y=2.0, z=-0.5))
+        self.start_position = [tmp["x"], tmp["y"], tmp["z"]]
+        self.loop = self.get_param("~loop", default=False)
+        self.target_index = 0
+        self.speed = 0.0
+        self.look_ahead_square = 0.0
+        self.current_position = np.array([0.0, 0.0, 0.0])
+        self.running = False
+        self.position_updated = False
+        self.position_reached = False
+
+        self.wait_time = 5.0
+        self.waited_for_measurement = False
+
+        self.current_position_pub = rospy.Publisher("~current_position",
+                                                    Point,
+                                                    queue_size=1)
+        self.target_position_pub = rospy.Publisher("~target_position",
+                                                   Point,
+                                                   queue_size=1)
+        self.position_reached_pub = rospy.Publisher("position_reached",
+                                                    Bool,
+                                                    queue_size=1)
+
+        self.move_to_start_position_service = rospy.Service(
+            "~move_to_start_position", Trigger,
+            self.serve_move_to_start_position)
+        self.start_service = rospy.Service("~start", Trigger, self.serve_start)
+        self.stop_service = rospy.Service("~stop", Trigger, self.serve_stop)
+        self.update_path_service = rospy.Service("~update_path", Trigger,
+                                                 self.serve_update_path)
+
+        self.motor_x_is_position_reached = rospy.ServiceProxy(
+            "motor_x/is_position_reached", GetBool, persistent=True)
+        self.motor_y_is_position_reached = rospy.ServiceProxy(
+            "motor_y/is_position_reached", GetBool, persistent=True)
+        self.motor_z_is_position_reached = rospy.ServiceProxy(
+            "motor_z/is_position_reached", GetBool, persistent=True)
+
+        self.motor_pos_x_pub = rospy.Publisher(
+            "motor_x/setpoint_position/absolute", Float64, queue_size=1)
+        self.motor_pos_y_pub = rospy.Publisher(
+            "motor_y/setpoint_position/absolute", Float64, queue_size=1)
+        self.motor_pos_z_pub = rospy.Publisher(
+            "motor_z/setpoint_position/absolute", Float64, queue_size=1)
+
+        self.motor_speed_x_pub = rospy.Publisher("motor_x/setpoint_velocity",
+                                                 Float64,
+                                                 queue_size=1)
+        self.motor_speed_y_pub = rospy.Publisher("motor_y/setpoint_velocity",
+                                                 Float64,
+                                                 queue_size=1)
+        self.motor_speed_z_pub = rospy.Publisher("motor_z/setpoint_velocity",
+                                                 Float64,
+                                                 queue_size=1)
+
+        self.pos_x_sub = rospy.Subscriber(
+            "motor_x/position", GantryMotorPosition,
+            (lambda msg: self.on_position(msg, 0)))
+        self.pos_y_sub = rospy.Subscriber(
+            "motor_y/position", GantryMotorPosition,
+            (lambda msg: self.on_position(msg, 1)))
+        self.pos_z_sub = rospy.Subscriber(
+            "motor_z/position", GantryMotorPosition,
+            (lambda msg: self.on_position(msg, 2)))
+
+    def on_position(self, msg, axis):
+        with self.data_lock:
+            self.current_position[axis] = msg.position
+            self.position_updated = True
+
+    def serve_dynamic_reconfigure(self, config, level):
+        with self.data_lock:
+            self.look_ahead_square = config["look_ahead_distance"]**2
+            self.speed = config["speed"]
+        return config
+
+    def get_path(self):
+        path_list = self.get_param("~path")
+        path = np.zeros([len(path_list), 3], dtype=float)
+        for (i, point) in enumerate(path_list):
+            path[i] = np.array([point["x"], point["y"], point["z"]])
+        return path
+
+    def update_path(self):
+        self.path = self.get_path()
+        tmp = self.get_param("~start_position",
+                             default=dict(x=1.0, y=2.0, z=-0.5))
+        self.start_position = [tmp["x"], tmp["y"], tmp["z"]]
+        self.loop = self.get_param("~loop", default=True)
+        self.target_index = 0
+
+    def serve_start(self, req):
+        with self.data_lock:
+            self.running = True
+        return TriggerResponse(True, "Started path following!")
+
+    def serve_stop(self, req):
+        with self.data_lock:
+            self.running = False
+            self.publish_speed([0, 0, 0])
+        return TriggerResponse(True, "Stopped path following!")
+
+    def serve_move_to_start_position(self, req):
+        with self.data_lock:
+            self.running = False
+            text = "Moving to start position ({:.2f}, {:.2f}, {:.2f})".format(
+                self.start_position[0], self.start_position[1],
+                self.start_position[2])
+            self.publish_position(self.start_position)
+        return TriggerResponse(True, text)
+
+    def serve_update_path(self, req):
+        with self.data_lock:
+            if self.running:
+                ret = TriggerResponse(False,
+                                      "Cannot update path while running.")
+            else:
+                self.update_path()
+                ret = TriggerResponse(True, "Updated the path.")
+
+        return ret
+
+    def update_control(self):
+        if self.position_updated:
+            self.position_updated = False
+
+            position_x_reached = self.motor_x_is_position_reached()
+            position_y_reached = self.motor_y_is_position_reached()
+            position_z_reached = self.motor_z_is_position_reached()
+
+            if not (position_x_reached and position_y_reached
+                    and position_z_reached):
+                self.position_reached = False
+                self.waited_for_measurement = False
+                self.position_reached_pub.publish(Bool(False))
+            elif (position_x_reached and position_y_reached
+                  and position_z_reached) and not self.waited_for_measurement:
+                self.position_reached = True
+                self.position_reached_pub.publish(Bool(True))
+
+                rospy.sleep(self.wait_time)
+                self.waited_for_measurement = True
+                self.target_index += 1
+            
+            position = self.waypoints[self.target_index]
+            self.publish_position(position)
+
+            # success, self.target_index = get_next_target(self.target_index, self.current_position,
+            #     self.look_ahead_square, self.loop)
+            # if not success:
+            #     speed = np.array([0.0, 0.0, 0.0])
+            #     if not self.loop:
+            #         rospy.loginfo("Reached target position.")
+            #         self.running = False
+            #         self.target_index = 0
+            #     else:
+            #         rospy.logerr_throttle(
+            #             1.0, "Could not find a suitable target position!")
+            # else:
+            #     rospy.logdebug_throttle(0.5, "Index: %d", self.target_index)
+            #     position = self.path[self.target_index]
+            #     self.publish_position(position)
+
+    def publish_speed(self, speed):
+        self.motor_speed_x_pub.publish(Float64(speed[0]))
+        self.motor_speed_y_pub.publish(Float64(speed[1]))
+        self.motor_speed_z_pub.publish(Float64(speed[2]))
+
+    def publish_position(self, position):
+        self.motor_pos_x_pub.publish(Float64(position[0]))
+        self.motor_pos_y_pub.publish(Float64(position[1]))
+        self.motor_pos_z_pub.publish(Float64(position[2]))
+
+    def publish_debug(self, current_position, target_position):
+        c = Point()
+        c.x = current_position[0]
+        c.y = current_position[1]
+        c.z = current_position[2]
+        self.current_position_pub.publish(c)
+        t = Point()
+        t.x = target_position[0]
+        t.y = target_position[1]
+        t.z = target_position[2]
+        self.target_position_pub.publish(t)
+
+    def run(self):
+        hz = self.get_param("~rate", default=20.0)
+        rate = rospy.Rate(hz)
+
+        while not rospy.is_shutdown():
+            with self.data_lock:
+                if self.running:
+                    # self.update_control()
+                    self.update_control()
+
+                self.publish_debug(self.current_position,
+                                   self.path[self.target_index])
+            rate.sleep()
+
+
+def main():
+    node = WayPointFollower("way_point_follower")
+    node.run()
+
+
+if __name__ == "__main__":
+    main()

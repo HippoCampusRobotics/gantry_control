@@ -29,6 +29,7 @@ catkin_package(
 catkin_install_python(PROGRAMS
   nodes/motor
   nodes/path_follower
+  nodes/waypoint_follower
   nodes/path_plotter
   scripts/get_motor_info
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
