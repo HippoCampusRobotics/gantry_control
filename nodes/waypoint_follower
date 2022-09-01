@@ -189,6 +189,7 @@ class WayPointFollower(Node):
         if self.target_index >= len(self.waypoints):
             rospy.loginfo("Finished!")
             self.target_index -= 1
+            self.running = False
             return False
         rospy.loginfo("Moving to waypoint [%d/%d]", self.target_index,
                       len(self.waypoints) - 1)
