@@ -170,7 +170,8 @@ class WayPointFollower(Node):
 
     def all_positions_reached(self):
         for axis in self.is_position_reached_services:
-            response: GetBoolResponse = self.is_position_reached_services[axis]
+            response: GetBoolResponse = self.is_position_reached_services[axis](
+            )
             if not response.success:
                 rospy.logerr(
                     "Failed to call position reached service for axis [%s]!",
