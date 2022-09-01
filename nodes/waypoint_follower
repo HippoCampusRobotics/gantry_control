@@ -188,6 +188,7 @@ class WayPointFollower(Node):
         self.target_index += 1
         if self.target_index >= len(self.waypoints):
             rospy.loginfo("Finished!")
+            self.target_index -= 1
             return False
         self.publish_position_setpoint(self.waypoints[self.target_index])
         return True
