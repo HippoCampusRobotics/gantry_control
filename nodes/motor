@@ -207,11 +207,7 @@ class MotorNode(Node):
     def move_to_position(self):
         increments = int(self.position_setpoint["position"] *
                          self.increments_per_length_unit)
-        rospy.loginfo("Moving to %dinc / %.2fm", increments,
-                      self.position_setpoint["position"])
-        rospy.loginfo("Relative=%s", self.position_setpoint["relative"])
         with self.motor_lock:
-            rospy.loginfo("Setting target")
             self.motor.set_position_target(
                 increments, relative=self.position_setpoint["relative"])
             self.motor.move_to_target_position()
