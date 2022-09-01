@@ -190,6 +190,8 @@ class WayPointFollower(Node):
             rospy.loginfo("Finished!")
             self.target_index -= 1
             return False
+        rospy.loginfo("Moving to waypoint [%d/%d]", self.target_index,
+                      len(self.waypoints) - 1)
         self.publish_position_setpoint(self.waypoints[self.target_index])
         return True
 
