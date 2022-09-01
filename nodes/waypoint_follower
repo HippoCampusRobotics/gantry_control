@@ -15,7 +15,6 @@ from std_srvs.srv import Trigger, TriggerResponse
 
 
 class WayPointFollower(Node):
-
     def __init__(self, name):
         super(WayPointFollower, self).__init__(name=name)
 
@@ -26,7 +25,6 @@ class WayPointFollower(Node):
         self.start_position = [tmp["x"], tmp["y"], tmp["z"]]
         self.loop = self.get_param("~loop", default=False)
         self.target_index = 0
-        self.number_waypoints = self.waypoints.shape[0]
         self.speed = 0.0
         self.look_ahead_square = 0.0
         self.current_position = np.array([0.0, 0.0, 0.0])
@@ -38,7 +36,7 @@ class WayPointFollower(Node):
         self.wait_time_start = rospy.Time.now()
         self.wait_time = rospy.Duration(5.0)
         self.waited_for_measurement = False
-        self.first_time_reached_wp = True
+        self.last_time_position_reached = True
         self.updated_target_index = False
 
         self.current_position_pub = rospy.Publisher("~current_position",
@@ -64,17 +62,10 @@ class WayPointFollower(Node):
         self.update_path_service = rospy.Service("~update_path", Trigger,
                                                  self.serve_update_path)
 
-        rospy.wait_for_service('motor_z/is_position_reached')
-        self.motor_x_is_position_reached = rospy.ServiceProxy(
-            "motor_x/is_position_reached", GetBool, persistent=True)
-        self.motor_y_is_position_reached = rospy.ServiceProxy(
-            "motor_y/is_position_reached", GetBool, persistent=True)
-        self.motor_z_is_position_reached = rospy.ServiceProxy(
-            "motor_z/is_position_reached", GetBool, persistent=True)
+        self.is_position_reached_services = self.init_position_reached_services(
+            persistent=True)
 
-        self.x_position_reached = False
-        self.y_position_reached = False
-        self.z_position_reached = False
+        self.position_reached = {"x": False, "y": False, "z": False}
 
         self.first_position_send = False
 
@@ -105,6 +96,19 @@ class WayPointFollower(Node):
             "motor_z/position", GantryMotorPosition,
             (lambda msg: self.on_position(msg, 2)))
 
+    def init_position_reached_services(self, persistent):
+        axes = ["x", "y", "z"]
+        services = {}
+        for axis in axes:
+            service_name = f"motor_{axis}/is_position_reached"
+            rospy.loginfo("Waiting for [%s] service...", service_name)
+            rospy.wait_for_service(service_name)
+            rospy.loginfo("Service [%s] is available.", service_name)
+            services[axis] = rospy.ServiceProxy(service_name,
+                                                GetBool,
+                                                persistent=persistent)
+        return services
+
     def on_position(self, msg, axis):
         with self.data_lock:
             self.current_position[axis] = msg.position
@@ -134,12 +138,14 @@ class WayPointFollower(Node):
     def serve_start(self, req):
         with self.data_lock:
             self.running = True
+            self.target_index = 0
+            self.publish_position_setpoint(self.waypoints[self.target_index])
         return TriggerResponse(True, "Started path following!")
 
     def serve_stop(self, req):
         with self.data_lock:
             self.running = False
-            self.publish_speed([0, 0, 0])
+            self.publish_speed_setpoint([0, 0, 0])
         return TriggerResponse(True, "Stopped path following!")
 
     def serve_move_to_start_position(self, req):
@@ -148,7 +154,7 @@ class WayPointFollower(Node):
             text = "Moving to start position ({:.2f}, {:.2f}, {:.2f})".format(
                 self.start_position[0], self.start_position[1],
                 self.start_position[2])
-            self.publish_position(self.start_position)
+            self.publish_position_setpoint(self.start_position)
         return TriggerResponse(True, text)
 
     def serve_update_path(self, req):
@@ -162,94 +168,52 @@ class WayPointFollower(Node):
 
         return ret
 
-    def check_position_reached(self):
-        # motor done driving?
-        self.x_position_reached = self.motor_x_is_position_reached()
-        self.y_position_reached = self.motor_y_is_position_reached()
-        self.z_position_reached = self.motor_z_is_position_reached()
+    def all_positions_reached(self):
+        for axis in self.is_position_reached_services:
+            response: GetBoolResponse = self.is_position_reached_services[axis]
+            if not response.success:
+                rospy.logerr(
+                    "Failed to call position reached service for axis [%s]!",
+                    axis)
+                return False
+            if not response.value:
+                return False
+        return True
 
-        if (self.x_position_reached and self.y_position_reached
-                and self.z_position_reached):
-            # actually reached correct wp?
-            correct_x_position_reached = math.isclose(self.current_position[0],
-                                                      self.target_position[0],
-                                                      rel_tol=0.001)
-            correct_y_position_reached = math.isclose(self.current_position[1],
-                                                      self.target_position[1],
-                                                      rel_tol=0.001)
-            correct_z_position_reached = math.isclose(self.current_position[2],
-                                                      self.target_position[2],
-                                                      rel_tol=0.001)
+    def need_to_wait(self):
+        return self.wait_time_start + self.wait_time > rospy.Time.now()
 
-            if (correct_x_position_reached and correct_y_position_reached
-                    and correct_z_position_reached):
-                self.position_reached = True
-            else:
-                self.position_reached = False
-        else:
-            self.position_reached = False
-
-        self.position_reached_pub.publish(Bool(self.position_reached))
+    def publish_next_position_target(self):
+        self.target_index += 1
+        if self.target_index >= len(self.waypoints):
+            rospy.loginfo("Finished!")
+            return False
+        self.publish_position_setpoint(self.waypoints[self.target_index])
+        return True
 
     def update_control(self):
-        self.check_position_reached()
-
-        if self.position_reached:
-
-            if self.first_time_reached_wp:  # first time reaching wp
-
-                self.first_time_reached_wp = False
-
-                rospy.loginfo(
-                    f"Reached target position with index {self.target_index}")
-                rospy.loginfo(
-                    f"Waiting for {self.wait_time.to_sec()} seconds!")
-
+        is_position_reached = self.all_positions_reached()
+        self.position_reached_pub.publish(Bool(is_position_reached))
+        if is_position_reached:
+            if self.last_time_position_reached:
+                if self.need_to_wait():
+                    # do nothing, we still need to wait
+                    return
+                else:
+                    self.publish_next_position_target()
+            # we just arrived at the waypoint.
+            else:
                 self.wait_time_start = rospy.Time.now()
-
-            else:  # still at same wp, do we still need to wait?
-                now = rospy.Time.now()
-                # rospy.loginfo(f"We're still at wp {self.target_index}, time now: {now}")
-                # rospy.loginfo(f"Time difference: {self.wait_time_start - now}")
-
-                if (now - self.wait_time_start
-                    ) > self.wait_time and not self.updated_target_index:
-                    # we have waited for the appropriate time
-                    # let's go to next waypoint
-
-                    self.target_index += 1
-                    self.updated_target_index = True  # only want to do this once
-
-                    rospy.loginfo(
-                        f"Waited long enough! difference:  {(self.wait_time_start - now).to_sec()}"
-                    )
-
-                    # publish new target
-                    if self.target_index < self.number_waypoints:
-                        self.target_position = self.waypoints[
-                            self.target_index]
-                        self.publish_position(self.target_position)
-                        rospy.loginfo(
-                            f"Going to next waypoint at {self.waypoints[self.target_index]}"
-                        )
-                    else:
-                        rospy.loginfo("Finished waypoint list!")
-
-        else:  # currently moving or haven't started moving yet
-
-            # reset variables
-            self.first_time_reached_wp = True
-            self.updated_target_index = False
-
+        self.last_time_position_reached = is_position_reached
         self.publish_debug(self.current_position,
                            self.waypoints[self.target_index])
 
-    def publish_speed(self, speed):
+    def publish_speed_setpoint(self, speed):
         self.motor_speed_x_pub.publish(Float64(speed[0]))
         self.motor_speed_y_pub.publish(Float64(speed[1]))
         self.motor_speed_z_pub.publish(Float64(speed[2]))
 
-    def publish_position(self, position):
+    def publish_position_setpoint(self, position):
         self.motor_pos_x_pub.publish(Float64(position[0]))
         self.motor_pos_y_pub.publish(Float64(position[1]))
         self.motor_pos_z_pub.publish(Float64(position[2]))
@@ -274,14 +238,7 @@ class WayPointFollower(Node):
         while not rospy.is_shutdown():
             with self.data_lock:
                 if self.running:
-                    if not self.first_position_send:
-                        self.target_position = self.waypoints[0]
-                        self.publish_position(self.target_position)
-                        rospy.loginfo("First Waypoint set!")
-                        self.first_position_send = True
-
                     self.update_control()
-
                 self.publish_debug(self.current_position,
                                    self.waypoints[self.target_index])
             rate.sleep()
