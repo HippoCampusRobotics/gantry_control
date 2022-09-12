@@ -196,19 +196,25 @@ class WayPointFollower(Node):
         self.publish_position_setpoint(self.waypoints[self.target_index])
         return True
 
+    def republish_position_target(self):
+        if self.target_index >= len(self.waypoints):
+            return
+        self.publish_position_setpoint(self.waypoints[self.target_index])
+
     def update_control(self):
         is_position_reached = self.all_positions_reached()
         self.position_reached_pub.publish(Bool(is_position_reached))
         if is_position_reached:
             if self.last_time_position_reached:
                 if self.need_to_wait():
-                    # do nothing, we still need to wait
                     return
                 else:
                     self.publish_next_position_target()
             # we just arrived at the waypoint.
             else:
                 self.wait_time_start = rospy.Time.now()
+        else:
+            self.republish_position_target()
         self.last_time_position_reached = is_position_reached
         self.publish_debug(self.current_position,
                            self.waypoints[self.target_index])
