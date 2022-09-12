@@ -12,9 +12,33 @@ from geometry_msgs.msg import Point
 from hippocampus_msgs.msg import GantryMotorPosition
 from hippocampus_msgs.srv import GetBool, GetBoolResponse
 from std_srvs.srv import Trigger, TriggerResponse
+import collections
+
+ALL_AXES = ["x", "y", "z"]
+
+
+class PositionReachedDebouncer():
+    def __init__(self, n_debounce) -> None:
+        self.state = False
+        self.n_debounce = n_debounce
+        self.debounce_array = collections.deque([False] * self.n_debounce,
+                                                maxlen=self.n_debounce)
+
+    def update(self, new_state: bool):
+        self.debounce_array.append(new_state)
+        if all(self.debounce_array):
+            self.state = True
+        elif not any(self.debounce_array):
+            self.state = False
+
+    def set(self, new_state: bool):
+        self.state = new_state
+        self.debounce_array = collections.deque([new_state] * self.n_debounce)
 
 
 class WayPointFollower(Node):
+    N_DEBOUNCE = 5
+
     def __init__(self, name):
         super(WayPointFollower, self).__init__(name=name)
 
@@ -65,7 +89,11 @@ class WayPointFollower(Node):
         self.is_position_reached_services = self.init_position_reached_services(
             persistent=True)
 
-        self.position_reached = {"x": False, "y": False, "z": False}
+        self.position_reached = {
+            "x": PositionReachedDebouncer(self.N_DEBOUNCE),
+            "y": PositionReachedDebouncer(self.N_DEBOUNCE),
+            "z": PositionReachedDebouncer(self.N_DEBOUNCE)
+        }
 
         self.first_position_send = False
 
@@ -168,16 +196,28 @@ class WayPointFollower(Node):
 
         return ret
 
-    def all_positions_reached(self):
+    def update_positions_reached(self):
+        tries = 3
         for axis in self.is_position_reached_services:
-            response: GetBoolResponse = self.is_position_reached_services[axis](
-            )
-            if not response.success:
-                rospy.logerr(
-                    "Failed to call position reached service for axis [%s]!",
-                    axis)
-                return False
-            if not response.value:
+            success = False
+            for i in range(tries):
+                response = self.is_position_reached_services[axis]()
+                if not response.success:
+                    rospy.logerr(
+                        "Failed to call position reached service for axis "
+                        "[%s]! %d tries left", axis, tries - i - 1)
+                    continue
+                success = True
+                break
+            if not success:
+                rospy.logfatal("Giving up to call service for axis [%s]", axis)
+                self.position_reached[axis].update(False)
+            else:
+                self.position_reached[axis].update(response.value)
+
+    def all_positions_reached(self):
+        for axis in ALL_AXES:
+            if not self.position_reached[axis].state:
                 return False
         return True
 
@@ -193,6 +233,12 @@ class WayPointFollower(Node):
             return False
         rospy.loginfo("Moving to waypoint [%d/%d]", self.target_index,
                       len(self.waypoints) - 1)
+
+        # make your we do not have wrong values due to unlucky timing. Since
+        # we publish a new setpoint, we know the position won't be reached
+        # in the next timestep.
+        for axis in ALL_AXES:
+            self.position_reached[axis].set(False)
         self.publish_position_setpoint(self.waypoints[self.target_index])
         return True
 
