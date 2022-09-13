@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-from xmlrpc.client import Boolean
 from gantry_control import mcbl2805
 import rospy
 import gantry_control
 from hippocampus_common.node import Node
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Bool
 from hippocampus_msgs.msg import (GantryMotorPosition, GantryMotorVelocity,
                                   GantryMotorLimitSwitches)
 # from hippocampus_msgs.srv import (GetFloat, GetFloatResponse, SetFloat,
@@ -52,7 +51,7 @@ class MotorNode(Node):
                                                 GantryMotorLimitSwitches,
                                                 queue_size=1)
         self.position_reached_pub = rospy.Publisher("~position_reached",
-                                                    Boolean,
+                                                    Bool,
                                                     queue_size=1)
 
         self.start_homing_service = rospy.Service("~start_homing", Trigger,
@@ -160,7 +159,7 @@ class MotorNode(Node):
                 is_position_reached = self.motor.is_position_reached()
                 if is_position_reached.success:
                     self.position_reached_pub.publish(
-                        Boolean(is_position_reached.value))
+                        Bool(is_position_reached.value))
                 if not pos_result.success:
                     rospy.logerr(
                         "[%s] Could not get motor position. "
