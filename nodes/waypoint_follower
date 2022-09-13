@@ -43,7 +43,8 @@ class PositionReachedDebouncer():
 
     def set(self, new_state: bool):
         self.state = new_state
-        self.debounce_array = collections.deque([new_state] * self.n_debounce)
+        self.debounce_array = collections.deque([new_state] * self.n_debounce,
+                                                maxlen=self.n_debounce)
 
 
 class WayPointFollower(Node):
