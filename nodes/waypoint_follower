@@ -23,13 +23,23 @@ class PositionReachedDebouncer():
         self.n_debounce = n_debounce
         self.debounce_array = collections.deque([False] * self.n_debounce,
                                                 maxlen=self.n_debounce)
+        self.rising_edge = False
+        self.falling_edge = False
 
     def update(self, new_state: bool):
         self.debounce_array.append(new_state)
         if all(self.debounce_array):
-            self.state = True
+            if not self.state:
+                self.rising_edge = True
+                self.state = True
+            else:
+                self.rising_edge = False
         elif not any(self.debounce_array):
-            self.state = False
+            if self.state:
+                self.falling_edge = True
+                self.state = False
+            else:
+                self.falling_edge = False
 
     def set(self, new_state: bool):
         self.state = new_state
@@ -55,7 +65,11 @@ class WayPointFollower(Node):
         self.target_position = np.array([0.0, 0.0, 0.0])
         self.running = False
         self.position_updated = False
-        self.position_reached = False
+        self.position_reached = {
+            "x": PositionReachedDebouncer(self.N_DEBOUNCE),
+            "y": PositionReachedDebouncer(self.N_DEBOUNCE),
+            "z": PositionReachedDebouncer(self.N_DEBOUNCE)
+        }
 
         self.wait_time_start = rospy.Time.now()
         self.wait_time = rospy.Duration(5.0)
@@ -88,12 +102,6 @@ class WayPointFollower(Node):
 
         self.is_position_reached_services = self.init_position_reached_services(
             persistent=True)
-
-        self.position_reached = {
-            "x": PositionReachedDebouncer(self.N_DEBOUNCE),
-            "y": PositionReachedDebouncer(self.N_DEBOUNCE),
-            "z": PositionReachedDebouncer(self.N_DEBOUNCE)
-        }
 
         self.first_position_send = False
 
@@ -196,24 +204,31 @@ class WayPointFollower(Node):
 
         return ret
 
-    def update_positions_reached(self):
-        tries = 3
-        for axis in self.is_position_reached_services:
-            success = False
-            for i in range(tries):
-                response = self.is_position_reached_services[axis]()
-                if not response.success:
-                    rospy.logerr(
-                        "Failed to call position reached service for axis "
-                        "[%s]! %d tries left", axis, tries - i - 1)
-                    continue
-                success = True
+    def call_positions_reached(self, axis, tries):
+        for i in range(tries):
+            response = self.is_position_reached_services[axis]()
+            if not response.success:
+                rospy.logerr(
+                    "Failed to call position reached service for axis "
+                    "[%s]!", axis)
+            else:
                 break
-            if not success:
+        return response
+
+    def update_positions_reached(self):
+        for axis in ALL_AXES:
+            response = self.call_positions_reached(axis, 3)
+            if not response.success:
                 rospy.logfatal("Giving up to call service for axis [%s]", axis)
                 self.position_reached[axis].update(False)
             else:
                 self.position_reached[axis].update(response.value)
+            if self.position_reached[axis].rising_edge:
+                rospy.loginfo("[%s-axis] Rising edge in position_reached.",
+                              axis)
+            elif self.position_reached[axis].rising_edge:
+                rospy.loginfo("[%s-axis] Falling edge in position_reached.",
+                              axis)
 
     def all_positions_reached(self):
         for axis in ALL_AXES:
@@ -248,6 +263,7 @@ class WayPointFollower(Node):
         self.publish_position_setpoint(self.waypoints[self.target_index])
 
     def update_control(self):
+        self.update_positions_reached()
         is_position_reached = self.all_positions_reached()
         self.position_reached_pub.publish(Bool(is_position_reached))
         if is_position_reached:
